@@ -10,12 +10,8 @@ import {
   getDocs,
   collection,
   updateDoc,
-  addDoc,
-  query,
-  where,
   serverTimestamp,
 } from "firebase/firestore";
-
 import {
   createUserWithEmailAndPassword,
   getAuth,
@@ -27,12 +23,12 @@ import {
 } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  apiKey: "AIzaSyABzIPIBkC_xfYGF6fDzb5TKRH75K_3wHk",
+  authDomain: "circles-app-833c7.firebaseapp.com",
+  projectId: "circles-app-833c7",
+  storageBucket: "circles-app-833c7.firebasestorage.app",
+  messagingSenderId: "746103390832",
+  appId: "1:746103390832:web:7ad63b9b960db2985f6ab5",
 };
 
 const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -59,32 +55,6 @@ type Person = {
 };
 
 type FirestorePerson = Person & {
-  createdAt?: unknown;
-  updatedAt?: unknown;
-};
-
-type FriendRequest = {
-  id: string;
-  fromUserId: string;
-  fromName: string;
-  fromEmail: string;
-  fromPersonId: string;
-  toEmail: string;
-  toUserId?: string;
-  status: "pending" | "accepted" | "ignored";
-};
-
-type FirestoreCircle = Circle & {
-  createdAt?: unknown;
-  updatedAt?: unknown;
-};
-
-type FirestoreGuestPass = GuestPass & {
-  createdAt?: unknown;
-  updatedAt?: unknown;
-};
-
-type FirestoreFriendRequest = FriendRequest & {
   createdAt?: unknown;
   updatedAt?: unknown;
 };
@@ -191,7 +161,18 @@ type Circle = {
   guest?: boolean;
 };
 
-const people: Person[] = [];
+const people: Person[] = [
+  { id: "brandon", name: "Brandon", initials: "BC", color: "from-cyan-300 to-blue-500", status: "Friend" },
+  { id: "conor", name: "Conor", initials: "CR", color: "from-lime-300 to-emerald-500", status: "Friend" },
+  { id: "maya", name: "Maya", initials: "MY", color: "from-fuchsia-300 to-pink-500", status: "Friend" },
+  { id: "john", name: "John", initials: "JN", color: "from-orange-300 to-red-500", status: "Friend" },
+  { id: "alex", name: "Alex", initials: "AX", color: "from-violet-300 to-indigo-500", status: "Friend" },
+  { id: "taylor", name: "Taylor", initials: "TY", color: "from-yellow-200 to-orange-400", status: "Suggested" },
+  { id: "nina", name: "Nina", initials: "NA", color: "from-teal-200 to-cyan-500", status: "Friend" },
+  { id: "sam", name: "Sam", initials: "SM", color: "from-rose-200 to-purple-500", status: "Pending" },
+  { id: "ava", name: "Ava", initials: "AV", color: "from-sky-200 to-indigo-400", status: "Friend" },
+  { id: "liam", name: "Liam", initials: "LM", color: "from-green-200 to-lime-500", status: "Guest" },
+];
 
 const circleColors = [
   "from-cyan-400 to-blue-600",
@@ -202,7 +183,290 @@ const circleColors = [
   "from-teal-300 to-emerald-700",
 ];
 
-const initialCircles: Circle[] = [];
+const initialCircles: Circle[] = [
+  {
+    id: "high-school",
+    name: "High School Besties",
+    type: "Close Friends",
+    color: "from-cyan-400 to-blue-600",
+    pulse: "Active",
+    dailyPrompt: "What is your Sunday energy?",
+    members: [people[0], people[1], people[2], people[3], people[4], people[5]],
+    posts: [
+      {
+        id: "p1",
+        personId: "conor",
+        caption: "Currently pretending this iced coffee counts as lunch.",
+        time: "12 min ago",
+        mood: "chaotic calm",
+        prompt: "What is your Sunday energy?",
+        gradient: "from-cyan-300 via-blue-500 to-indigo-700",
+      },
+      {
+        id: "p2",
+        personId: "maya",
+        caption: "Fit check before dinner. Be honest but gentle.",
+        time: "34 min ago",
+        mood: "main character",
+        prompt: "What is your Sunday energy?",
+        gradient: "from-fuchsia-300 via-pink-500 to-orange-400",
+      },
+      {
+        id: "p3",
+        personId: "john",
+        caption: "Walked outside for 9 minutes. Growth.",
+        time: "1 hr ago",
+        mood: "recharging",
+        prompt: "What is your Sunday energy?",
+        gradient: "from-lime-300 via-emerald-500 to-teal-700",
+      },
+      {
+        id: "p4",
+        personId: "alex",
+        caption: "This meeting could have been a single text.",
+        time: "2 hr ago",
+        mood: "offline soon",
+        prompt: "What is your Sunday energy?",
+        gradient: "from-violet-300 via-purple-500 to-slate-900",
+      },
+    ],
+    loop: [
+  {
+    id: "l1",
+    title: "Friday drinks",
+    type: "Plan",
+    status: "Planning",
+    quickNote: "Need one casual spot that is not impossible to get into.",
+    timing: { type: "Date + Time", date: "2026-05-22", time: "20:00" },
+    location: "TBD",
+    people: ["Brandon", "Conor", "Maya"],
+    participants: {
+      in: ["Brandon", "Maya"],
+      maybe: ["Conor"],
+      out: [],
+    },
+    poll: {
+      question: "Where should we go?",
+      options: [
+        { id: "o1", label: "Jungle Bird", votes: ["Brandon"] },
+        { id: "o2", label: "Bar Bonobo", votes: ["Maya"] },
+        { id: "o3", label: "Shy Shy", votes: [] },
+      ],
+    },
+    tasks: [
+      { id: "t1", title: "Find one place with space for 5", owner: "Brandon", done: false },
+      { id: "t2", title: "Text the group once place is picked", owner: "Maya", done: false },
+    ],
+  },
+  {
+    id: "l2",
+    title: "Sunday walk",
+    type: "Plan",
+    status: "Idea",
+    quickNote: "Hudson River path if the weather holds.",
+    timing: { type: "All Day", date: "2026-05-24" },
+    location: "Hudson River path",
+    people: ["John", "Alex"],
+    participants: {
+      in: ["John"],
+      maybe: ["Alex"],
+      out: [],
+    },
+    tasks: [],
+  },
+],
+  },
+  {
+    id: "college-reunion",
+    name: "College Reunion",
+    type: "Close Friends",
+    color: "from-fuchsia-400 to-violet-700",
+    pulse: "Warming",
+    dailyPrompt: "Drop something that feels very us.",
+    members: [people[0], people[1], people[2], people[6], people[7]],
+    posts: [
+      {
+        id: "p5",
+        personId: "nina",
+        caption: "Found an old photo and we need to discuss immediately.",
+        time: "22 min ago",
+        mood: "nostalgic",
+        prompt: "Drop something that feels very us.",
+        gradient: "from-yellow-200 via-pink-400 to-purple-700",
+      },
+      {
+        id: "p6",
+        personId: "sam",
+        caption: "Reunion planning has officially become a group project.",
+        time: "1 hr ago",
+        mood: "planning mode",
+        prompt: "Drop something that feels very us.",
+        gradient: "from-sky-300 via-cyan-500 to-blue-800",
+      },
+    ],
+    loop: [
+  {
+    id: "l3",
+    title: "Reunion weekend",
+    type: "Event",
+    status: "Planning",
+    quickNote: "Choosing between June 14 and June 21.",
+    timing: { type: "Date Range", date: "2026-06-14", endDate: "2026-06-16" },
+    location: "TBD",
+    people: ["Brandon", "Nina", "Sam"],
+    participants: {
+      in: ["Brandon", "Nina"],
+      maybe: ["Sam"],
+      out: [],
+    },
+    poll: {
+      question: "Which weekend works better?",
+      options: [
+        { id: "o4", label: "June 14 weekend", votes: ["Brandon", "Nina"] },
+        { id: "o5", label: "June 21 weekend", votes: ["Sam"] },
+      ],
+    },
+    tasks: [
+      { id: "t3", title: "Confirm best weekend", owner: "Nina", done: false },
+    ],
+  },
+],
+  },
+  {
+    id: "lisbon-trip",
+    name: "Lisbon Trip",
+    type: "Travel",
+    color: "from-orange-300 to-rose-600",
+    pulse: "Full Pulse",
+    dailyPrompt: "What are you adding to the trip mood board?",
+    members: [people[0], people[1], people[3], people[4], people[6], people[8]],
+    posts: [
+      {
+        id: "p7",
+        personId: "ava",
+        caption: "Saved 4 restaurants. None of them are practical.",
+        time: "8 min ago",
+        mood: "vacation brain",
+        prompt: "What are you adding to the trip mood board?",
+        gradient: "from-orange-200 via-amber-400 to-rose-600",
+      },
+      {
+        id: "p8",
+        personId: "john",
+        caption: "I will not be the itinerary dad. Unless needed.",
+        time: "45 min ago",
+        mood: "secret planner",
+        prompt: "What are you adding to the trip mood board?",
+        gradient: "from-teal-200 via-cyan-500 to-sky-800",
+      },
+      {
+        id: "p9",
+        personId: "conor",
+        caption: "Just here to confirm we are doing beach day.",
+        time: "2 hr ago",
+        mood: "locked in",
+        prompt: "What are you adding to the trip mood board?",
+        gradient: "from-blue-200 via-indigo-400 to-violet-700",
+      },
+    ],
+    loop: [
+  {
+    id: "l4",
+    title: "Day 1 dinner",
+    type: "Trip",
+    status: "Planning",
+    quickNote: "Pick between the seafood spot and the wine bar.",
+    timing: { type: "Date + Time", date: "2026-07-12", time: "20:30" },
+    location: "Lisbon, TBD",
+    people: ["Brandon", "Conor", "Ava", "John"],
+    participants: {
+      in: ["Brandon", "Conor", "Ava"],
+      maybe: ["John"],
+      out: [],
+    },
+    poll: {
+      question: "What is the dinner move?",
+      options: [
+        { id: "o6", label: "Seafood spot", votes: ["Conor", "Ava"] },
+        { id: "o7", label: "Wine bar", votes: ["Brandon"] },
+      ],
+    },
+    tasks: [
+      { id: "t4", title: "Make reservation", owner: "Brandon", done: false },
+      { id: "t5", title: "Send backup options", owner: "Ava", done: false },
+    ],
+  },
+  {
+    id: "l5",
+    title: "Beach day",
+    type: "Trip",
+    status: "Scheduled",
+    quickNote: "Leave by 10:30 AM. Bring towels.",
+    timing: { type: "All Day", date: "2026-07-13" },
+    location: "Beach TBD",
+    people: ["Everyone"],
+    participants: {
+      in: ["Brandon", "Conor", "John", "Ava"],
+      maybe: [],
+      out: [],
+    },
+    tasks: [
+      { id: "t6", title: "Pick beach", owner: "John", done: false },
+    ],
+  },
+],
+  },
+  {
+    id: "friday-guest",
+    name: "John’s Friday Orbit",
+    type: "Guest Orbit",
+    color: "from-lime-300 to-cyan-500",
+    pulse: "Active",
+    dailyPrompt: "What is your night out energy?",
+    guest: true,
+    members: [people[0], people[3], people[4], people[5], people[9]],
+    posts: [
+      {
+        id: "p10",
+        personId: "liam",
+        caption: "New here. My night out energy is observational with sudden enthusiasm.",
+        time: "5 min ago",
+        mood: "guest energy",
+        prompt: "What is your night out energy?",
+        gradient: "from-lime-200 via-green-400 to-cyan-700",
+      },
+      {
+        id: "p11",
+        personId: "john",
+        caption: "Friday plan is alive. Barely organized, but alive.",
+        time: "49 min ago",
+        mood: "host mode",
+        prompt: "What is your night out energy?",
+        gradient: "from-indigo-300 via-blue-500 to-slate-900",
+      },
+    ],
+    loop: [
+  {
+    id: "l6",
+    title: "Friday pregame",
+    type: "Event",
+    status: "Scheduled",
+    quickNote: "Meet at 8 PM. This Orbit closes Saturday morning.",
+    timing: { type: "Date + Time", date: "2026-05-22", time: "20:00" },
+    location: "John’s apartment",
+    people: ["John", "Brandon", "Liam"],
+    participants: {
+      in: ["John", "Brandon"],
+      maybe: ["Liam"],
+      out: [],
+    },
+    tasks: [
+      { id: "t7", title: "Send address", owner: "John", done: false },
+    ],
+  },
+],
+  },
+];
 
 function Avatar({ person, size = "md" }: { person: Person; size?: "sm" | "md" | "lg" }) {
   const sizeClass = size === "sm" ? "h-9 w-9 text-xs" : size === "lg" ? "h-16 w-16 text-lg" : "h-11 w-11 text-sm";
@@ -227,31 +491,29 @@ function PulseBadge({ pulse }: { pulse: Circle["pulse"] }) {
 }
 
 export default function Home() {
-  const [circles, setCircles] = useState<Circle[]>([]);
-  const [contacts, setContacts] = useState<Person[]>([]);
+  const [circles, setCircles] = useState<Circle[]>(initialCircles);
+  const [contacts, setContacts] = useState<Person[]>(people);
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
-  const [activeTab, setActiveTab] = useState<"home" | "orbit" | "people">("home");
-  const [selectedCircleId, setSelectedCircleId] = useState("");
+  const [activeTab, setActiveTab] = useState<"home" | "orbit" | "loop" | "map" | "people">("home");
+  const [selectedCircleId, setSelectedCircleId] = useState(initialCircles[0].id);
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
   const [isCreateCircleOpen, setIsCreateCircleOpen] = useState(false);
   const [isAddUpdateOpen, setIsAddUpdateOpen] = useState(false);
   const [isCreateLoopOpen, setIsCreateLoopOpen] = useState(false);
   const [guestPasses, setGuestPasses] = useState<GuestPass[]>([]);
-  const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
 const [isCreateGuestPassOpen, setIsCreateGuestPassOpen] = useState(false);
 const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
 const [guestPassContext, setGuestPassContext] = useState<{
   circleId: string;
   loopId?: string;
 }>({
-  circleId: "",
+  circleId: initialCircles[0].id,
 });
 const [previewGuestPass, setPreviewGuestPass] = useState<GuestPass | null>(null);
 
-const selectedCircle =
-  circles.find((circle) => circle.id === selectedCircleId) || null;
+const selectedCircle = circles.find((circle) => circle.id === selectedCircleId) || circles[0];
 
 function getInitials(name: string) {
   return name
@@ -272,10 +534,6 @@ function userToCurrentUser(user: User): CurrentUser {
     email: user.email || "",
     initials: getInitials(displayName) || "ME",
   };
-}
-
-function sanitizeForFirestore<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value));
 }
 
 async function createUserProfileDoc(user: User, name: string, email: string) {
@@ -306,92 +564,11 @@ function cleanPersonFromFirestore(data: FirestorePerson): Person {
   };
 }
 
-function cleanCircleFromFirestore(data: FirestoreCircle): Circle {
-  return {
-    id: data.id,
-    name: data.name,
-    type: data.type,
-    color: data.color,
-    pulse: data.pulse,
-    dailyPrompt: data.dailyPrompt,
-    members: data.members || [],
-    posts: data.posts || [],
-    loop: data.loop || [],
-    guest: data.guest,
-  };
-}
-
-function cleanGuestPassFromFirestore(data: FirestoreGuestPass): GuestPass {
-  return {
-    id: data.id,
-    guestName: data.guestName,
-    circleId: data.circleId,
-    loopId: data.loopId,
-    duration: data.duration,
-    access: data.access,
-    introPrompt: data.introPrompt,
-    note: data.note,
-    status: data.status,
-  };
-}
-
-function cleanFriendRequestFromFirestore(
-  id: string,
-  data: FirestoreFriendRequest
-): FriendRequest {
-  return {
-    id,
-    fromUserId: data.fromUserId,
-    fromName: data.fromName,
-    fromEmail: data.fromEmail,
-    fromPersonId: data.fromPersonId,
-    toEmail: data.toEmail,
-    toUserId: data.toUserId,
-    status: data.status,
-  };
-}
-
-async function createFriendRequestInFirestore(
-  request: Omit<FriendRequest, "id">
-) {
-  const requestRef = await addDoc(collection(db, "friendRequests"), {
-    ...request,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-
-  await updateDoc(requestRef, {
-    id: requestRef.id,
-    updatedAt: serverTimestamp(),
-  });
-
-  return requestRef.id;
-}
-
-async function loadIncomingFriendRequests(email: string) {
-  const normalizedEmail = email.trim().toLowerCase();
-
-  const requestsQuery = query(
-    collection(db, "friendRequests"),
-    where("toEmail", "==", normalizedEmail),
-    where("status", "==", "pending")
-  );
-
-  const snapshot = await getDocs(requestsQuery);
-
-  return snapshot.docs.map((requestDoc) =>
-    cleanFriendRequestFromFirestore(
-      requestDoc.id,
-      requestDoc.data() as FirestoreFriendRequest
-    )
-  );
-}
-
 async function savePersonToFirestore(userId: string, person: Person) {
   await setDoc(
     doc(db, "users", userId, "people", person.id),
     {
-      ...sanitizeForFirestore(person),
+      ...person,
       updatedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
     },
@@ -404,109 +581,21 @@ async function loadPeopleFromFirestore(userId: string) {
   const snapshot = await getDocs(peopleRef);
 
   if (snapshot.empty) {
-    return [];
+    const starterPeople = people.filter((person) => person.id !== "brandon");
+
+    await Promise.all(
+      starterPeople.map((person) => savePersonToFirestore(userId, person))
+    );
+
+    setContacts(starterPeople);
+    return;
   }
 
-  return snapshot.docs.map((personDoc) =>
+  const loadedPeople = snapshot.docs.map((personDoc) =>
     cleanPersonFromFirestore(personDoc.data() as FirestorePerson)
   );
-}
-
-async function saveCircleToFirestore(userId: string, circle: Circle) {
-  await setDoc(
-    doc(db, "users", userId, "circles", circle.id),
-    {
-      ...sanitizeForFirestore(circle),
-      updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
-}
-
-async function loadCirclesFromFirestore(userId: string) {
-  const circlesRef = collection(db, "users", userId, "circles");
-  const snapshot = await getDocs(circlesRef);
-
-  if (snapshot.empty) {
-    return [];
-  }
-
-  return snapshot.docs.map((circleDoc) =>
-    cleanCircleFromFirestore(circleDoc.data() as FirestoreCircle)
-  );
-}
-
-async function saveGuestPassToFirestore(userId: string, guestPass: GuestPass) {
-  await setDoc(
-    doc(db, "users", userId, "guestPasses", guestPass.id),
-    {
-      ...sanitizeForFirestore(guestPass),
-      updatedAt: serverTimestamp(),
-      createdAt: serverTimestamp(),
-    },
-    { merge: true }
-  );
-}
-
-async function loadGuestPassesFromFirestore(userId: string) {
-  const guestPassesRef = collection(db, "users", userId, "guestPasses");
-  const snapshot = await getDocs(guestPassesRef);
-
-  if (snapshot.empty) return [];
-
-  return snapshot.docs.map((guestPassDoc) =>
-    cleanGuestPassFromFirestore(guestPassDoc.data() as FirestoreGuestPass)
-  );
-}
-
-async function loadAppDataFromFirestore(userId: string, email: string) {
-  const [
-    loadedPeople,
-    loadedCircles,
-    loadedGuestPasses,
-    loadedIncomingRequests,
-  ] = await Promise.all([
-    loadPeopleFromFirestore(userId),
-    loadCirclesFromFirestore(userId),
-    loadGuestPassesFromFirestore(userId),
-    loadIncomingFriendRequests(email),
-  ]);
 
   setContacts(loadedPeople);
-  setCircles(loadedCircles);
-  setGuestPasses(loadedGuestPasses);
-  setIncomingRequests(loadedIncomingRequests);
-
-  if (loadedCircles.length > 0) {
-    setSelectedCircleId(loadedCircles[0].id);
-    setSelectedPostIndex(0);
-  } else {
-    setSelectedCircleId("");
-    setSelectedPostIndex(0);
-  }
-}
-
-function updateCircleLocallyAndInFirestore(
-  circleId: string,
-  updater: (circle: Circle) => Circle
-) {
-  const existingCircle = circles.find((circle) => circle.id === circleId);
-  if (!existingCircle) return;
-
-  const updatedCircle = updater(existingCircle);
-
-  setCircles((currentCircles) =>
-    currentCircles.map((circle) =>
-      circle.id === circleId ? updatedCircle : circle
-    )
-  );
-
-  if (currentUser) {
-    saveCircleToFirestore(currentUser.id, updatedCircle).catch((error) => {
-      console.error("Error saving Circle to Firestore:", error);
-    });
-  }
 }
 
 useEffect(() => {
@@ -526,8 +615,8 @@ useEffect(() => {
 useEffect(() => {
   if (!currentUser) return;
 
-  loadAppDataFromFirestore(currentUser.id, currentUser.email).catch((error) => {
-    console.error("Error loading app data from Firestore:", error);
+  loadPeopleFromFirestore(currentUser.id).catch((error) => {
+    console.error("Error loading People from Firestore:", error);
   });
 }, [currentUser?.id]);
 
@@ -537,19 +626,15 @@ useEffect(() => {
     setActiveTab("orbit");
   }
 
-async function createCircle(newCircle: Circle) {
-  setCircles((currentCircles) => [newCircle, ...currentCircles]);
-  setSelectedCircleId(newCircle.id);
-  setSelectedPostIndex(0);
-  setIsCreateCircleOpen(false);
-  setActiveTab("orbit");
-
-  if (currentUser) {
-    await saveCircleToFirestore(currentUser.id, newCircle);
+  function createCircle(newCircle: Circle) {
+    setCircles((currentCircles) => [newCircle, ...currentCircles]);
+    setSelectedCircleId(newCircle.id);
+    setSelectedPostIndex(0);
+    setIsCreateCircleOpen(false);
+    setActiveTab("orbit");
   }
-}
 
-function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
+  function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
   const gradients = [
     "from-cyan-300 via-blue-500 to-indigo-700",
     "from-fuchsia-300 via-pink-500 to-orange-400",
@@ -564,16 +649,22 @@ function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
     caption,
     time: "Just now",
     mood,
-    prompt: selectedCircle?.dailyPrompt || "What is your energy today?",
+    prompt: selectedCircle.dailyPrompt,
     photoUrl,
     gradient: gradients[Math.floor(Math.random() * gradients.length)],
   };
 
-  updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
-    ...circle,
-    posts: [newPost, ...circle.posts],
-    pulse: circle.pulse === "Quiet" ? "Warming" : circle.pulse,
-  }));
+  setCircles((currentCircles) =>
+    currentCircles.map((circle) => {
+      if (circle.id !== selectedCircleId) return circle;
+
+      return {
+        ...circle,
+        posts: [newPost, ...circle.posts],
+        pulse: circle.pulse === "Quiet" ? "Warming" : circle.pulse,
+      };
+    })
+  );
 
   setSelectedPostIndex(0);
   setIsAddUpdateOpen(false);
@@ -581,102 +672,127 @@ function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
 }
 
 function addLoopToCircle(loopItem: LoopItem) {
-  updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
-    ...circle,
-    loop: [loopItem, ...circle.loop],
-  }));
+  setCircles((currentCircles) =>
+    currentCircles.map((circle) => {
+      if (circle.id !== selectedCircleId) return circle;
+
+      return {
+        ...circle,
+        loop: [loopItem, ...circle.loop],
+      };
+    })
+  );
 
   setIsCreateLoopOpen(false);
-  setActiveTab("orbit");
+  setActiveTab("loop");
 }
 
 function archiveLoop(loopId: string) {
-  updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
-    ...circle,
-    loop: circle.loop.map((item) =>
-      item.id === loopId ? { ...item, archived: true } : item
-    ),
-  }));
-}
-
-function setLoopParticipation(
-  loopId: string,
-  personName: string,
-  status: ParticipationStatus
-) {
-  updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
-    ...circle,
-    loop: circle.loop.map((item) => {
-      if (item.id !== loopId) return item;
-
-      const withoutPerson: LoopParticipants = {
-        in: item.participants.in.filter((name) => name !== personName),
-        maybe: item.participants.maybe.filter((name) => name !== personName),
-        out: item.participants.out.filter((name) => name !== personName),
-      };
-
-      const nextKey = status.toLowerCase() as keyof LoopParticipants;
-
-      const nextParticipants: LoopParticipants = {
-        ...withoutPerson,
-        [nextKey]: [...withoutPerson[nextKey], personName],
-      };
+  setCircles((currentCircles) =>
+    currentCircles.map((circle) => {
+      if (circle.id !== selectedCircleId) return circle;
 
       return {
-        ...item,
-        participants: nextParticipants,
+        ...circle,
+        loop: circle.loop.map((item) =>
+          item.id === loopId ? { ...item, archived: true } : item
+        ),
       };
-    }),
-  }));
+    })
+  );
+}
+
+function setLoopParticipation(loopId: string, personName: string, status: ParticipationStatus) {
+  setCircles((currentCircles) =>
+    currentCircles.map((circle) => {
+      if (circle.id !== selectedCircleId) return circle;
+
+      return {
+        ...circle,
+        loop: circle.loop.map((item) => {
+          if (item.id !== loopId) return item;
+
+          const withoutPerson: LoopParticipants = {
+            in: item.participants.in.filter((name) => name !== personName),
+            maybe: item.participants.maybe.filter((name) => name !== personName),
+            out: item.participants.out.filter((name) => name !== personName),
+          };
+
+          const nextParticipants: LoopParticipants = {
+            ...withoutPerson,
+            [status.toLowerCase()]: [
+              ...withoutPerson[status.toLowerCase() as keyof LoopParticipants],
+              personName,
+            ],
+          };
+
+          return {
+            ...item,
+            participants: nextParticipants,
+          };
+        }),
+      };
+    })
+  );
 }
 
 function voteOnLoopPoll(loopId: string, optionId: string, personName: string) {
-  updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
-    ...circle,
-    loop: circle.loop.map((item) => {
-      if (item.id !== loopId || !item.poll) return item;
+  setCircles((currentCircles) =>
+    currentCircles.map((circle) => {
+      if (circle.id !== selectedCircleId) return circle;
 
       return {
-        ...item,
-        poll: {
-          ...item.poll,
-          options: item.poll.options.map((option) => {
-            const votesWithoutPerson = option.votes.filter(
-              (name) => name !== personName
-            );
+        ...circle,
+        loop: circle.loop.map((item) => {
+          if (item.id !== loopId || !item.poll) return item;
 
-            if (option.id !== optionId) {
-              return {
-                ...option,
-                votes: votesWithoutPerson,
-              };
-            }
+          return {
+            ...item,
+            poll: {
+              ...item.poll,
+              options: item.poll.options.map((option) => {
+                const votesWithoutPerson = option.votes.filter((name) => name !== personName);
 
-            return {
-              ...option,
-              votes: [...votesWithoutPerson, personName],
-            };
-          }),
-        },
+                if (option.id !== optionId) {
+                  return {
+                    ...option,
+                    votes: votesWithoutPerson,
+                  };
+                }
+
+                return {
+                  ...option,
+                  votes: [...votesWithoutPerson, personName],
+                };
+              }),
+            },
+          };
+        }),
       };
-    }),
-  }));
+    })
+  );
 }
 
 function toggleLoopTask(loopId: string, taskId: string) {
-  updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
-    ...circle,
-    loop: circle.loop.map((item) => {
-      if (item.id !== loopId) return item;
+  setCircles((currentCircles) =>
+    currentCircles.map((circle) => {
+      if (circle.id !== selectedCircleId) return circle;
 
       return {
-        ...item,
-        tasks: item.tasks.map((task) =>
-          task.id === taskId ? { ...task, done: !task.done } : task
-        ),
+        ...circle,
+        loop: circle.loop.map((item) => {
+          if (item.id !== loopId) return item;
+
+          return {
+            ...item,
+            tasks: item.tasks.map((task) =>
+              task.id === taskId ? { ...task, done: !task.done } : task
+            ),
+          };
+        }),
       };
-    }),
-  }));
+    })
+  );
 }
 
 function openGuestPass(circleId: string, loopId?: string) {
@@ -684,7 +800,7 @@ function openGuestPass(circleId: string, loopId?: string) {
   setIsCreateGuestPassOpen(true);
 }
 
-async function createGuestPass(passDetails: Omit<GuestPass, "id" | "status">) {
+function createGuestPass(passDetails: Omit<GuestPass, "id" | "status">) {
   const newGuestPass: GuestPass = {
     ...passDetails,
     id: `guest-pass-${Date.now()}`,
@@ -694,19 +810,11 @@ async function createGuestPass(passDetails: Omit<GuestPass, "id" | "status">) {
   setGuestPasses((currentPasses) => [newGuestPass, ...currentPasses]);
   setIsCreateGuestPassOpen(false);
   setPreviewGuestPass(newGuestPass);
-
-  if (currentUser) {
-    await saveGuestPassToFirestore(currentUser.id, newGuestPass);
-  }
 }
 
-async function addPersonToPeople(
-  name: string,
-  email: string,
-  _status: ContactStatus
-) {
+async function addPersonToPeople(name: string, email: string, status: ContactStatus) {
   const trimmedName = name.trim();
-  const trimmedEmail = email.trim().toLowerCase();
+  const trimmedEmail = email.trim();
 
   if (!trimmedName || !trimmedEmail) return;
 
@@ -732,24 +840,15 @@ async function addPersonToPeople(
     email: trimmedEmail,
     initials: initials || "??",
     color: colorOptions[Math.floor(Math.random() * colorOptions.length)],
-    status: "Pending",
+    status,
   };
 
   setContacts((currentContacts) => [newPerson, ...currentContacts]);
   setIsAddPersonOpen(false);
 
-  if (!currentUser) return;
-
-  await savePersonToFirestore(currentUser.id, newPerson);
-
-  await createFriendRequestInFirestore({
-    fromUserId: currentUser.id,
-    fromName: currentUser.name,
-    fromEmail: currentUser.email.trim().toLowerCase(),
-    fromPersonId: newPerson.id,
-    toEmail: trimmedEmail,
-    status: "pending",
-  });
+  if (currentUser) {
+    await savePersonToFirestore(currentUser.id, newPerson);
+  }
 }
 
 async function updatePersonStatus(personId: string, status: ContactStatus) {
@@ -765,57 +864,6 @@ async function updatePersonStatus(personId: string, status: ContactStatus) {
     status,
     updatedAt: serverTimestamp(),
   });
-}
-
-async function acceptFriendRequest(request: FriendRequest) {
-  if (!currentUser) return;
-
-  const requesterAsPerson: Person = {
-    id: request.fromUserId,
-    name: request.fromName,
-    email: request.fromEmail,
-    initials: getInitials(request.fromName) || "??",
-    color: "from-cyan-300 to-blue-500",
-    status: "Friend",
-  };
-
-  await savePersonToFirestore(currentUser.id, requesterAsPerson);
-
-  await updateDoc(doc(db, "friendRequests", request.id), {
-    status: "accepted",
-    toUserId: currentUser.id,
-    updatedAt: serverTimestamp(),
-  });
-
-
-  setContacts((currentContacts) => {
-    const alreadyExists = currentContacts.some(
-      (person) => person.id === requesterAsPerson.id
-    );
-
-    if (alreadyExists) {
-      return currentContacts.map((person) =>
-        person.id === requesterAsPerson.id ? requesterAsPerson : person
-      );
-    }
-
-    return [requesterAsPerson, ...currentContacts];
-  });
-
-  setIncomingRequests((currentRequests) =>
-    currentRequests.filter((item) => item.id !== request.id)
-  );
-}
-
-async function ignoreFriendRequest(request: FriendRequest) {
-  await updateDoc(doc(db, "friendRequests", request.id), {
-    status: "ignored",
-    updatedAt: serverTimestamp(),
-  });
-
-  setIncomingRequests((currentRequests) =>
-    currentRequests.filter((item) => item.id !== request.id)
-  );
 }
 
 
@@ -890,9 +938,7 @@ if (!currentUser) {
 <div className="pointer-events-none fixed inset-0 backdrop-blur-3xl" />
 
       <section className="relative mx-auto flex h-dvh w-full max-w-[430px] flex-col overflow-hidden border-x border-white/10 bg-slate-950/55 shadow-2xl shadow-black">
-        {activeTab !== "people" && selectedCircle && (
-  <Header circle={selectedCircle} activeTab={activeTab} />
-)}
+        <Header circle={selectedCircle} activeTab={activeTab} />
 
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
           {activeTab === "home" && (
@@ -908,53 +954,44 @@ if (!currentUser) {
 />
           )}
 
-{activeTab === "orbit" && selectedCircle && (
-  <OrbitView
-    circle={selectedCircle}
-    selectedPostIndex={selectedPostIndex}
-    setSelectedPostIndex={setSelectedPostIndex}
-    onOpenAddUpdate={() => setIsAddUpdateOpen(true)}
-    onOpenCreateLoop={() => setIsCreateLoopOpen(true)}
-    onArchiveLoop={archiveLoop}
-    onSetParticipation={setLoopParticipation}
-    onVotePoll={voteOnLoopPoll}
-    onToggleTask={toggleLoopTask}
-    onOpenGuestPass={openGuestPass}
-  />
-)}
+          {activeTab === "orbit" && (
+      <OrbitView
+       circle={selectedCircle}
+       selectedPostIndex={selectedPostIndex}
+        setSelectedPostIndex={setSelectedPostIndex}
+       onOpenAddUpdate={() => setIsAddUpdateOpen(true)}
+          />
+          )}
 
-{activeTab === "orbit" && !selectedCircle && (
-  <div className="rounded-[2.5rem] border border-white/10 bg-white/8 p-6 text-center shadow-xl shadow-black/20 backdrop-blur-2xl">
-    <h2 className="text-2xl font-semibold">No Circle yet.</h2>
-    <p className="mt-3 text-sm leading-6 text-white/55">
-      Create your first Circle to start an Orbit.
-    </p>
-    <button
-      onClick={() => setIsCreateCircleOpen(true)}
-      className="mt-5 w-full rounded-full bg-white px-5 py-4 font-semibold text-slate-950 active:scale-[0.98]"
-    >
-      Create a Circle
-    </button>
-  </div>
-)}
-
-          {activeTab === "people" && (
-<PeopleView
-  contacts={contacts}
-  incomingRequests={incomingRequests}
-  onOpenAddPerson={() => setIsAddPersonOpen(true)}
-  onUpdatePersonStatus={updatePersonStatus}
-  onAcceptFriendRequest={acceptFriendRequest}
-  onIgnoreFriendRequest={ignoreFriendRequest}
+          {activeTab === "loop" && (
+      <LoopView
+  circle={selectedCircle}
+  onOpenCreateLoop={() => setIsCreateLoopOpen(true)}
+  onArchiveLoop={archiveLoop}
+  onSetParticipation={setLoopParticipation}
+  onVotePoll={voteOnLoopPoll}
+  onToggleTask={toggleLoopTask}
+  onOpenGuestPass={openGuestPass}
 />
+            )}
+
+          {activeTab === "map" && (
+            <MapView
+              circles={circles}
+              selectedCircleId={selectedCircleId}
+              setSelectedCircleId={setSelectedCircleId}
+            />
+          )}
+          {activeTab === "people" && (
+  <PeopleView
+    contacts={contacts}
+    onOpenAddPerson={() => setIsAddPersonOpen(true)}
+    onUpdatePersonStatus={updatePersonStatus}
+  />
 )}
         </div>
 
-        <BottomNav
-  activeTab={activeTab}
-  setActiveTab={setActiveTab}
-  requestCount={incomingRequests.length}
-/>
+        <BottomNav activeTab={activeTab} setActiveTab={setActiveTab} />
 
         {isCreateCircleOpen && (
          <CreateCircleModal
@@ -963,14 +1000,14 @@ if (!currentUser) {
   onCreateCircle={createCircle}
 />
         )}
-        {isAddUpdateOpen && selectedCircle && (
+        {isAddUpdateOpen && (
   <AddUpdateModal
     circle={selectedCircle}
     onClose={() => setIsAddUpdateOpen(false)}
     onAddPost={addPostToCircle}
   />
 )}
-{isCreateLoopOpen && selectedCircle && (
+{isCreateLoopOpen && (
   <CreateLoopModal
     circle={selectedCircle}
     onClose={() => setIsCreateLoopOpen(false)}
@@ -1312,84 +1349,17 @@ function OrbitView({
   selectedPostIndex,
   setSelectedPostIndex,
   onOpenAddUpdate,
-  onOpenCreateLoop,
-  onArchiveLoop,
-  onSetParticipation,
-  onVotePoll,
-  onToggleTask,
-  onOpenGuestPass,
 }: {
   circle: Circle;
   selectedPostIndex: number;
   setSelectedPostIndex: (index: number) => void;
   onOpenAddUpdate: () => void;
-  onOpenCreateLoop: () => void;
-  onArchiveLoop: (loopId: string) => void;
-  onSetParticipation: (loopId: string, personName: string, status: ParticipationStatus) => void;
-  onVotePoll: (loopId: string, optionId: string, personName: string) => void;
-  onToggleTask: (loopId: string, taskId: string) => void;
-  onOpenGuestPass: (circleId: string, loopId: string) => void;
 }) {
   const posts = circle.posts;
   const selectedPost = posts[selectedPostIndex] || posts[0];
   const selectedPerson = selectedPost ? getPerson(circle, selectedPost.personId) : circle.members[0];
   const dialStep = posts.length ? 360 / posts.length : 0;
   const [circularDialAngle, setCircularDialAngle] = useState(0);
-  const [orbitMode, setOrbitMode] = useState<"updates" | "loop">("updates");
-const [touchStartX, setTouchStartX] = useState<number | null>(null);
-const [customEmoji, setCustomEmoji] = useState("");
-const [replyText, setReplyText] = useState("");
-const [postReplies, setPostReplies] = useState<Record<string, string[]>>({});
-
-const modeSwitcher = (
-  <div className="grid grid-cols-2 gap-2 rounded-full border border-white/10 bg-white/8 p-2 backdrop-blur-2xl">
-    <button
-      onClick={() => setOrbitMode("updates")}
-      className={`rounded-full px-4 py-3 text-sm font-semibold active:scale-95 ${
-        orbitMode === "updates" ? "bg-white text-slate-950" : "text-white/55"
-      }`}
-    >
-      Updates
-    </button>
-
-    <button
-      onClick={() => setOrbitMode("loop")}
-      className={`rounded-full px-4 py-3 text-sm font-semibold active:scale-95 ${
-        orbitMode === "loop" ? "bg-white text-slate-950" : "text-white/55"
-      }`}
-    >
-      Loop
-    </button>
-  </div>
-);
-
-function handleSwipeEnd(endX: number) {
-  if (touchStartX === null) return;
-
-  const delta = touchStartX - endX;
-
-  if (Math.abs(delta) > 40) {
-    moveDial(delta > 0 ? "next" : "prev");
-  }
-
-  setTouchStartX(null);
-}
-
-function addCustomEmojiReaction() {
-  if (!customEmoji.trim()) return;
-  setCustomEmoji("");
-}
-
-function addTextReply() {
-  if (!selectedPost || !replyText.trim()) return;
-
-  setPostReplies((currentReplies) => ({
-    ...currentReplies,
-    [selectedPost.id]: [...(currentReplies[selectedPost.id] || []), replyText.trim()],
-  }));
-
-  setReplyText("");
-}
 
   function moveDialAngleTo(targetAngle: number) {
   setCircularDialAngle((currentAngle) => {
@@ -1470,24 +1440,6 @@ function handleCircularDial(event: PointerEvent<HTMLButtonElement>) {
   setSelectedPostIndex(nextIndex);
 }
 
-if (orbitMode === "loop") {
-  return (
-    <div className="space-y-4">
-      {modeSwitcher}
-
-      <LoopView
-        circle={circle}
-        onOpenCreateLoop={onOpenCreateLoop}
-        onArchiveLoop={onArchiveLoop}
-        onSetParticipation={onSetParticipation}
-        onVotePoll={onVotePoll}
-        onToggleTask={onToggleTask}
-        onOpenGuestPass={onOpenGuestPass}
-      />
-    </div>
-  );
-}
-
   if (posts.length === 0) {
     return (
       <div className="flex h-full flex-col justify-center">
@@ -1513,20 +1465,15 @@ if (orbitMode === "loop") {
     );
   }
 
-return (
-  <div className="flex h-full flex-col gap-4">
-    {modeSwitcher}
-   <div
-  onTouchStart={(event) => setTouchStartX(event.touches[0].clientX)}
-  onTouchEnd={(event) => handleSwipeEnd(event.changedTouches[0].clientX)}
-  className="relative h-[430px] shrink-0 overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900/45 shadow-2xl shadow-black/30 backdrop-blur-2xl"
->
+  return (
+    <div className="flex h-full flex-col">
+      <div className="relative mt-3 h-[430px] shrink-0 overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900/45 shadow-2xl shadow-black/30 backdrop-blur-2xl">
   <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(255,215,235,0.36),transparent_28%),radial-gradient(circle_at_80%_28%,rgba(186,230,253,0.22),transparent_28%),radial-gradient(circle_at_30%_82%,rgba(168,85,247,0.40),transparent_34%),linear-gradient(145deg,rgba(15,23,42,0.95),rgba(30,41,59,0.70))]" />
   <div className="absolute left-1/2 top-[58%] h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-fuchsia-300/10 blur-3xl" />
   <div className="absolute right-[-20%] top-[20%] h-56 w-56 rounded-full bg-cyan-300/10 blur-3xl" />
   <div className="absolute bottom-[-18%] left-[-14%] h-64 w-64 rounded-full bg-violet-400/20 blur-3xl" />
 
-  <div className="absolute right-5 top-[88px] z-[130] grid h-24 w-24 place-items-center rounded-full border border-white/20 bg-white/18 text-center shadow-2xl shadow-black/40 backdrop-blur-2xl">
+     <div className="absolute left-1/2 top-[26%] z-[130] grid h-28 w-28 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/20 bg-white/18 text-center shadow-2xl shadow-black/40 backdrop-blur-2xl">
   <div>
     <p className="text-xs uppercase tracking-[0.25em] text-white/45">Today</p>
     <p className="mt-1 text-base font-semibold">Orbit</p>
@@ -1534,7 +1481,7 @@ return (
   </div>
 </div>
 
-<div className="absolute left-5 top-[88px] z-[120] max-w-[155px] rounded-[1.5rem] border border-white/10 bg-white/8 px-4 py-3 text-left backdrop-blur-xl">
+<div className="absolute left-5 top-5 max-w-[170px] rounded-[1.5rem] border border-white/10 bg-white/8 px-4 py-3 text-left backdrop-blur-xl">
   <p className="text-[10px] uppercase tracking-[0.22em] text-white/35">Prompt</p>
   <p className="mt-1 text-sm leading-5 text-white/75">{circle.dailyPrompt}</p>
 </div>
@@ -1639,69 +1586,24 @@ return (
   <p className="mt-3 text-base leading-6 text-white/90">{selectedPost.caption}</p>
 )}
 
-<div className="mt-5 space-y-3">
-  <div className="flex items-center gap-2">
-    {["❤️", "😂", "👀", "✨"].map((emoji) => (
-      <button
-        key={emoji}
-        className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-lg shadow-inner shadow-white/10 active:scale-95"
-      >
-        {emoji}
-      </button>
-    ))}
+          <div className="mt-5 flex items-center gap-2">
+            {["❤️", "😂", "👀", "✨"].map((emoji) => (
+              <button
+                key={emoji}
+                className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-lg shadow-inner shadow-white/10 active:scale-95"
+              >
+                {emoji}
+              </button>
+            ))}
 
-    <input
-      value={customEmoji}
-      onChange={(event) => setCustomEmoji(event.target.value)}
-      placeholder="Any emoji"
-      className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
-    />
-
-    <button
-      onClick={addCustomEmojiReaction}
-      className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950 active:scale-95"
-    >
-      React
-    </button>
-  </div>
-
-  <div className="flex gap-2">
-    <input
-      value={replyText}
-      onChange={(event) => setReplyText(event.target.value)}
-      placeholder="Reply with a message..."
-      className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
-    />
-
-    <button
-      onClick={addTextReply}
-      className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 active:scale-95"
-    >
-      Send
-    </button>
-  </div>
-
-  {(postReplies[selectedPost.id] || []).length > 0 && (
-    <div className="space-y-2">
-      {(postReplies[selectedPost.id] || []).map((reply, index) => (
-        <div
-          key={`${selectedPost.id}-reply-${index}`}
-          className="rounded-[1.25rem] bg-white/8 px-4 py-3 text-sm text-white/75"
-        >
-          {reply}
-        </div>
-      ))}
-    </div>
-  )}
-
-  <button className="rounded-full bg-white/8 px-4 py-2 text-xs text-white/45 active:scale-95">
-    Report post
-  </button>
-</div>
+            <button className="ml-auto rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 active:scale-95">
+              Reply
+            </button>
+          </div>
         </div>
       )}
 
-      <div className="hidden">
+      <div className="mt-6 flex items-center justify-center">
         <button
           aria-label="Circular Orbit dial"
           onPointerDown={(event) => {
@@ -2560,21 +2462,17 @@ function CreateLoopModal({
 
 function PeopleView({
   contacts,
-  incomingRequests,
   onOpenAddPerson,
   onUpdatePersonStatus,
-  onAcceptFriendRequest,
-  onIgnoreFriendRequest,
 }: {
   contacts: Person[];
-  incomingRequests: FriendRequest[];
   onOpenAddPerson: () => void;
   onUpdatePersonStatus: (personId: string, status: ContactStatus) => void;
-  onAcceptFriendRequest: (request: FriendRequest) => void;
-  onIgnoreFriendRequest: (request: FriendRequest) => void;
 }) {
   const friends = contacts.filter((person) => person.status === "Friend");
-  const sentRequests = contacts.filter((person) => person.status === "Pending");
+  const pending = contacts.filter((person) => person.status === "Pending");
+  const guests = contacts.filter((person) => person.status === "Guest");
+  const suggested = contacts.filter((person) => person.status === "Suggested");
 
   function renderPersonRow(person: Person) {
     return (
@@ -2588,22 +2486,35 @@ function PeopleView({
 
             <div className="min-w-0">
               <p className="truncate text-base font-semibold">{person.name}</p>
-              <p className="truncate text-xs text-white/45">
-                {person.email || person.status}
-              </p>
+              <p className="text-xs text-white/45">{person.status}</p>
             </div>
           </div>
 
-          {person.status === "Pending" && (
-            <span className="rounded-full bg-white/10 px-3 py-2 text-xs text-white/45">
-              Sent
-            </span>
+          {person.status === "Guest" && (
+            <button
+              onClick={() => onUpdatePersonStatus(person.id, "Friend")}
+              className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-slate-950 active:scale-95"
+            >
+              Add
+            </button>
           )}
 
-          {person.status === "Friend" && (
-            <span className="rounded-full bg-white/10 px-3 py-2 text-xs text-white/45">
-              Friend
-            </span>
+          {person.status === "Pending" && (
+            <button
+              onClick={() => onUpdatePersonStatus(person.id, "Friend")}
+              className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-slate-950 active:scale-95"
+            >
+              Accept
+            </button>
+          )}
+
+          {person.status === "Suggested" && (
+            <button
+              onClick={() => onUpdatePersonStatus(person.id, "Pending")}
+              className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white/65 active:scale-95"
+            >
+              Request
+            </button>
           )}
         </div>
       </div>
@@ -2618,113 +2529,70 @@ function PeopleView({
           Your private social layer.
         </h2>
         <p className="mt-3 text-sm leading-6 text-white/55">
-          Your People are the friends you can add to Circles or invite into a specific Loop.
+          People are the contacts you can add to Circles, include in Loops, or invite through Guest Passes.
         </p>
 
         <button
           onClick={onOpenAddPerson}
           className="mt-5 w-full rounded-full bg-white px-5 py-4 font-semibold text-slate-950 shadow-xl shadow-black/20 active:scale-[0.98]"
         >
-          Send Request
+          Add Person
         </button>
       </div>
 
-      {incomingRequests.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-sm font-semibold uppercase tracking-[0.22em] text-white/45">
-              Requests
-            </h3>
-            <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-950">
-              {incomingRequests.length}
-            </span>
-          </div>
-
-          {incomingRequests.map((request) => (
-            <div
-              key={request.id}
-              className="rounded-[2rem] border border-cyan-200/20 bg-cyan-300/10 p-4 shadow-xl shadow-black/10 backdrop-blur-2xl"
-            >
-              <div className="flex items-center gap-3">
-                <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white text-sm font-black text-slate-950">
-                  {request.fromName
-                    .split(" ")
-                    .map((part) => part[0])
-                    .join("")
-                    .slice(0, 2)
-                    .toUpperCase()}
-                </div>
-
-                <div className="min-w-0">
-                  <p className="truncate text-base font-semibold">
-                    {request.fromName}
-                  </p>
-                  <p className="truncate text-xs text-white/45">
-                    {request.fromEmail}
-                  </p>
-                </div>
-              </div>
-
-              <p className="mt-3 text-sm leading-6 text-white/60">
-                Wants to add you to their People.
-              </p>
-
-              <div className="mt-4 grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => onIgnoreFriendRequest(request)}
-                  className="rounded-full bg-white/10 px-4 py-3 text-sm font-semibold text-white/60 active:scale-95"
-                >
-                  Ignore
-                </button>
-
-                <button
-                  onClick={() => onAcceptFriendRequest(request)}
-                  className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950 active:scale-95"
-                >
-                  Accept
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-2 text-center">
+      <div className="grid grid-cols-4 gap-2 text-center">
         <div className="rounded-[1.5rem] bg-white/8 p-3">
           <p className="text-xl font-semibold">{friends.length}</p>
           <p className="text-[10px] text-white/45">Friends</p>
         </div>
 
         <div className="rounded-[1.5rem] bg-white/8 p-3">
-          <p className="text-xl font-semibold">{sentRequests.length}</p>
-          <p className="text-[10px] text-white/45">Sent</p>
+          <p className="text-xl font-semibold">{pending.length}</p>
+          <p className="text-[10px] text-white/45">Pending</p>
+        </div>
+
+        <div className="rounded-[1.5rem] bg-white/8 p-3">
+          <p className="text-xl font-semibold">{guests.length}</p>
+          <p className="text-[10px] text-white/45">Guests</p>
+        </div>
+
+        <div className="rounded-[1.5rem] bg-white/8 p-3">
+          <p className="text-xl font-semibold">{suggested.length}</p>
+          <p className="text-[10px] text-white/45">Suggested</p>
         </div>
       </div>
 
-      {friends.length > 0 && (
+      <div className="space-y-3">
+        <h3 className="px-1 text-sm font-semibold uppercase tracking-[0.22em] text-white/45">
+          Friends
+        </h3>
+        {friends.map(renderPersonRow)}
+      </div>
+
+      {pending.length > 0 && (
         <div className="space-y-3">
           <h3 className="px-1 text-sm font-semibold uppercase tracking-[0.22em] text-white/45">
-            Your People
+            Pending
           </h3>
-          {friends.map(renderPersonRow)}
+          {pending.map(renderPersonRow)}
         </div>
       )}
 
-      {sentRequests.length > 0 && (
+      {guests.length > 0 && (
         <div className="space-y-3">
           <h3 className="px-1 text-sm font-semibold uppercase tracking-[0.22em] text-white/45">
-            Sent Requests
+            Guests
           </h3>
-          {sentRequests.map(renderPersonRow)}
+          {guests.map(renderPersonRow)}
         </div>
       )}
 
-      {friends.length === 0 && sentRequests.length === 0 && incomingRequests.length === 0 && (
-        <div className="rounded-[2rem] border border-white/10 bg-white/8 p-6 text-center backdrop-blur-2xl">
-          <p className="text-lg font-semibold">No People yet.</p>
-          <p className="mt-2 text-sm leading-6 text-white/50">
-            Add someone by email to send your first request.
-          </p>
+      {suggested.length > 0 && (
+        <div className="space-y-3">
+          <h3 className="px-1 text-sm font-semibold uppercase tracking-[0.22em] text-white/45">
+            Suggested
+          </h3>
+          {suggested.map(renderPersonRow)}
         </div>
       )}
     </div>
@@ -2754,7 +2622,7 @@ const canAdd = name.trim().length > 1 && email.trim().includes("@");
               Add someone.
             </h2>
             <p className="mt-2 text-sm leading-6 text-white/45">
-  Add someone by email. They will see a request in People when they sign up or sign in.
+  Add someone by email. They will appear as Pending until they accept the invite.
 </p>
           </div>
 
@@ -2913,7 +2781,7 @@ function CreateGuestPassModal({
   <p className="text-xs uppercase tracking-[0.22em] text-white/35">Step 1</p>
   <h3 className="mt-1 text-lg font-semibold">Choose a friend</h3>
   <p className="mt-1 text-sm leading-5 text-white/45">
-    Choose someone from Your People to temporarily add to this Loop. They will not join the whole Circle.
+    Guest Passes can be sent to active friends first. Later, this can support phone or email invites.
   </p>
 
   {contacts.length > 0 ? (
@@ -3172,18 +3040,7 @@ function MapView({
   selectedCircleId: string;
   setSelectedCircleId: (circleId: string) => void;
 }) {
-  const selectedCircle = circles.find((circle) => circle.id === selectedCircleId) || null;
-
-if (!selectedCircle) {
-  return (
-    <div className="rounded-[2.5rem] border border-white/10 bg-white/8 p-6 text-center shadow-xl shadow-black/20 backdrop-blur-2xl">
-      <h2 className="text-2xl font-semibold">No map yet.</h2>
-      <p className="mt-3 text-sm leading-6 text-white/55">
-        Create a Circle first to see your social map.
-      </p>
-    </div>
-  );
-}
+  const selectedCircle = circles.find((circle) => circle.id === selectedCircleId) || circles[0];
 
   const [mapMode, setMapMode] = useState<"Plans" | "People" | "Circles">("Plans");
   const [selectedMapItem, setSelectedMapItem] = useState<{
@@ -3582,11 +3439,9 @@ if (!selectedCircle) {
                     </span>
 
                     <div className="min-w-0">
-  <p className="max-w-[78px] truncate text-sm font-semibold text-white">
-    {loopItem.title}
-  </p>
-  <p className="text-[10px] text-white/45">
-    {marker.circle.name}
+  <p className="truncate text-base font-semibold">{person.name}</p>
+  <p className="truncate text-xs text-white/45">
+    {person.status}{person.email ? ` · ${person.email}` : ""}
   </p>
 </div>
                   </div>
@@ -3851,16 +3706,12 @@ function CreateCircleModal({
   onCreateCircle: (circle: Circle) => void;
 }) {
   const [circleName, setCircleName] = useState("");
+  const [circleType, setCircleType] = useState<CircleType>("Close Friends");
   const [selectedColor, setSelectedColor] = useState(circleColors[0]);
-  const [selectedPeopleIds, setSelectedPeopleIds] = useState<string[]>([]);
-  const [peopleSearch, setPeopleSearch] = useState("");
+  const [selectedPeopleIds, setSelectedPeopleIds] = useState<string[]>(["brandon"]);
 
   const selectedCount = selectedPeopleIds.length;
-  const canCreate = circleName.trim().length > 1 && selectedCount >= 1 && selectedCount <= 8;
-  const filteredContacts = contacts.filter((person) =>
-  person.name.toLowerCase().includes(peopleSearch.toLowerCase()) ||
-  person.email?.toLowerCase().includes(peopleSearch.toLowerCase())
-);
+  const canCreate = circleName.trim().length > 1 && selectedCount >= 2 && selectedCount <= 8;
 
   function togglePerson(personId: string) {
     if (personId === "brandon") return;
@@ -3894,14 +3745,21 @@ function CreateCircleModal({
     const newCircle: Circle = {
   id: `${id}-${Date.now()}`,
   name: circleName.trim(),
-  type: "Close Friends",
+  type: circleType,
   color: selectedColor,
   pulse: "Quiet",
-  dailyPrompt: "What is your energy today?",
+  dailyPrompt:
+    circleType === "Travel"
+      ? "What is one thing you want to remember from this trip?"
+      : circleType === "Plans"
+        ? "What should this group figure out next?"
+        : circleType === "Guest Orbit"
+          ? "What should people know before the plan?"
+          : "What is your energy today?",
   members,
   posts: [],
   loop: [],
-  guest: false,
+  guest: circleType === "Guest Orbit",
 };
 
     onCreateCircle(newCircle);
@@ -3936,6 +3794,23 @@ function CreateCircleModal({
           </div>
 
           <div>
+            <label className="text-sm text-white/60">Circle type</label>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {(["Close Friends", "Plans", "Travel", "Guest Orbit"] as CircleType[]).map((type) => (
+                <button
+                  key={type}
+                  onClick={() => setCircleType(type)}
+                  className={`rounded-full border px-4 py-3 text-sm active:scale-95 ${
+                    circleType === type ? "border-white/30 bg-white text-slate-950" : "border-white/10 bg-white/8 text-white/65"
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
             <label className="text-sm text-white/60">Color</label>
             <div className="mt-2 flex gap-3">
               {circleColors.map((color) => (
@@ -3952,19 +3827,12 @@ function CreateCircleModal({
 
           <div>
             <div className="flex items-center justify-between">
-              <label className="text-sm text-white/60">Your People</label>
+              <label className="text-sm text-white/60">Members</label>
               <span className="rounded-full bg-white/10 px-3 py-1 text-xs text-white/60">{selectedCount}/8</span>
             </div>
 
-            <input
-  value={peopleSearch}
-  onChange={(event) => setPeopleSearch(event.target.value)}
-  placeholder="Search your people..."
-  className="mt-3 w-full rounded-full border border-white/10 bg-white/10 px-5 py-3 text-sm text-white outline-none placeholder:text-white/30 focus:border-white/30"
-/>
-
             <div className="mt-3 grid gap-2">
-              {filteredContacts.map((person) => {
+              {contacts.map((person) => {
                 const selected = selectedPeopleIds.includes(person.id);
                 const disabled = selectedPeopleIds.length >= 8 && !selected;
 
@@ -4147,38 +4015,30 @@ function handlePost() {
 function BottomNav({
   activeTab,
   setActiveTab,
-  requestCount,
 }: {
-  activeTab: "home" | "orbit" | "people";
-  setActiveTab: (tab: "home" | "orbit" | "people") => void;
-  requestCount: number;
+  activeTab: "home" | "orbit" | "loop" | "map" | "people";
+  setActiveTab: (tab: "home" | "orbit" | "loop" | "map" | "people") => void;
 }) {
-  const tabs: { id: "home" | "orbit" | "people"; label: string }[] = [
-    { id: "home", label: "Home" },
-    { id: "orbit", label: "Orbit" },
-    { id: "people", label: "People" },
-  ];
+const tabs: { id: "home" | "orbit" | "loop" | "map" | "people"; label: string }[] = [
+  { id: "home", label: "Home" },
+  { id: "orbit", label: "Orbit" },
+  { id: "loop", label: "Loop" },
+  { id: "map", label: "Map" },
+  { id: "people", label: "People" },
+];
 
   return (
     <nav className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 right-4 z-50 rounded-full border border-white/10 bg-white/12 p-2 shadow-2xl shadow-black/40 backdrop-blur-2xl">
-      <div className="grid grid-cols-3 gap-1">
+      <div className="grid grid-cols-5 gap-1">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`relative rounded-full px-2 py-3 text-[12px] font-medium transition active:scale-95 ${
-              activeTab === tab.id
-                ? "bg-white text-slate-950 shadow-lg"
-                : "text-white/55"
+            className={`rounded-full px-2 py-3 text-[12px] font-medium transition active:scale-95 ${
+              activeTab === tab.id ? "bg-white text-slate-950 shadow-lg" : "text-white/55"
             }`}
           >
             {tab.label}
-
-            {tab.id === "people" && requestCount > 0 && (
-              <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-cyan-300 px-1 text-[10px] font-black text-slate-950">
-                {requestCount}
-              </span>
-            )}
           </button>
         ))}
       </div>
