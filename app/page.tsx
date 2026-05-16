@@ -2587,11 +2587,13 @@ function PeopleView({
             <Avatar person={person} size="md" />
 
             <div className="min-w-0">
-              <p className="truncate text-base font-semibold">{person.name}</p>
-              <p className="truncate text-xs text-white/45">
-                {person.email || person.status}
-              </p>
-            </div>
+  <p className="max-w-[78px] truncate text-sm font-semibold text-white">
+    {loopItem.title}
+  </p>
+  <p className="text-[10px] text-white/45">
+    {marker.circle.name}
+  </p>
+</div>
           </div>
 
           {person.status === "Pending" && (
