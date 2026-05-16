@@ -4036,99 +4036,120 @@ function AddUpdateModal({
   const canPost = Boolean(photoUrl) || caption.trim().length > 1;
 
   function handlePhotoSelect(event: ChangeEvent<HTMLInputElement>) {
-  const file = event.target.files?.[0];
-  if (!file) return;
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-  const previewUrl = URL.createObjectURL(file);
-  setPhotoUrl(previewUrl);
-}
+    const previewUrl = URL.createObjectURL(file);
+    setPhotoUrl(previewUrl);
+  }
 
-function handlePost() {
-  if (!canPost) return;
-  onAddPost(caption.trim(), mood, photoUrl);
-}
+  function handlePost() {
+    if (!canPost) return;
+    onAddPost(caption.trim(), mood, photoUrl);
+  }
 
   return (
-    <div className="absolute inset-0 z-[220] bg-slate-950/70 px-5 py-8 backdrop-blur-2xl">
-      <div className="flex h-full flex-col rounded-[3rem] border border-white/10 bg-slate-950/85 p-5 shadow-2xl shadow-black">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm text-white/45">{circle.name}</p>
-            <h2 className="mt-1 text-3xl font-semibold tracking-tight">Add to today’s Orbit.</h2>
-          </div>
+    <div className="fixed inset-0 z-[220] overflow-hidden bg-slate-950/80 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-2xl">
+      <div className="mx-auto flex h-full max-h-full w-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
+        <div className="shrink-0 border-b border-white/10 bg-slate-950/80 p-4 backdrop-blur-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="truncate text-sm text-white/45">{circle.name}</p>
+              <h2 className="mt-1 text-3xl font-semibold leading-tight tracking-tight">
+                Add to today’s Orbit.
+              </h2>
+            </div>
 
-          <button
-            onClick={onClose}
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-xl text-white/70 active:scale-95"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="mt-6 rounded-[2.5rem] border border-white/10 bg-white/8 p-5 shadow-xl shadow-black/20">
-  <div className="rounded-[2rem] border border-white/10 bg-white/8 p-4">
-    <p className="text-xs uppercase tracking-[0.25em] text-white/40">Today’s Prompt</p>
-    <p className="mt-2 text-xl font-semibold leading-7">{circle.dailyPrompt}</p>
-  </div>
-
-  <label className="mt-5 block cursor-pointer rounded-[2.5rem] border border-dashed border-white/20 bg-white/8 p-4 text-center active:scale-[0.99]">
-    {photoUrl ? (
-      <img
-        src={photoUrl}
-        alt="Selected update"
-        className="mx-auto h-56 w-full rounded-[2rem] object-cover"
-      />
-    ) : (
-      <div className={`mx-auto grid h-56 w-full place-items-center rounded-[2rem] bg-gradient-to-br ${circle.color} shadow-2xl shadow-black/30`}>
-        <div className="grid h-24 w-24 place-items-center rounded-full bg-white/25 text-xl font-bold text-white ring-2 ring-white/25">
-          +
-        </div>
-      </div>
-    )}
-
-    <input
-      type="file"
-      accept="image/*"
-      onChange={handlePhotoSelect}
-      className="hidden"
-    />
-
-    <p className="mt-3 text-sm text-white/55">
-      {photoUrl ? "Tap to change photo" : "Add a photo"}
-    </p>
-  </label>
-
-  <textarea
-    value={caption}
-    onChange={(event) => setCaption(event.target.value)}
-    placeholder="Add a caption..."
-    maxLength={140}
-    className="mt-5 min-h-28 w-full resize-none rounded-[2rem] border border-white/10 bg-white/10 px-5 py-4 text-base leading-7 text-white outline-none placeholder:text-white/30 focus:border-white/30"
-  />
-
-  <div className="mt-2 flex justify-end">
-    <p className="text-xs text-white/40">{caption.length}/140</p>
-  </div>
-</div>
-
-        <div className="mt-5">
-          <p className="text-sm text-white/55">Mood</p>
-          <div className="mt-3 flex gap-2 overflow-x-auto pb-2">
-            {moods.map((item) => (
-              <button
-                key={item}
-                onClick={() => setMood(item)}
-                className={`shrink-0 rounded-full border px-4 py-3 text-sm active:scale-95 ${
-                  mood === item ? "border-white/30 bg-white text-slate-950" : "border-white/10 bg-white/8 text-white/65"
-                }`}
-              >
-                {item}
-              </button>
-            ))}
+            <button
+              onClick={onClose}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-xl text-white/70 active:scale-95"
+            >
+              ×
+            </button>
           </div>
         </div>
 
-        <div className="mt-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [-webkit-overflow-scrolling:touch]">
+          <div className="rounded-[2rem] border border-white/10 bg-white/8 p-4 shadow-xl shadow-black/20">
+            <p className="text-xs uppercase tracking-[0.25em] text-white/40">
+              Today’s Prompt
+            </p>
+            <p className="mt-2 text-xl font-semibold leading-7">
+              {circle.dailyPrompt}
+            </p>
+          </div>
+
+          <div className="mt-4">
+            <label className="block cursor-pointer rounded-[2rem] border border-dashed border-white/20 bg-white/8 p-4 text-center active:scale-[0.99]">
+              {photoUrl ? (
+                <img
+                  src={photoUrl}
+                  alt="Selected update"
+                  className="h-64 w-full rounded-[1.5rem] object-cover"
+                />
+              ) : (
+                <div className="grid h-48 place-items-center rounded-[1.5rem] bg-white/8">
+                  <div>
+                    <div className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-white text-2xl text-slate-950">
+                      +
+                    </div>
+                    <p className="mt-4 text-sm font-semibold text-white/80">
+                      Add a photo
+                    </p>
+                    <p className="mt-1 text-xs text-white/40">
+                      Optional for now
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <p className="mt-3 text-sm text-white/45">
+                {photoUrl ? "Tap to change photo" : "Choose from your phone"}
+              </p>
+
+              <input
+                type="file"
+                accept="image/*"
+                onChange={handlePhotoSelect}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          <div className="mt-4">
+            <label className="text-sm text-white/60">Caption</label>
+            <textarea
+              value={caption}
+              onChange={(event) => setCaption(event.target.value)}
+              placeholder="What do you want your Circle to know?"
+              rows={4}
+              className="mt-2 w-full resize-none rounded-[2rem] border border-white/10 bg-white/10 px-5 py-4 text-base leading-6 text-white outline-none placeholder:text-white/30 focus:border-white/30"
+            />
+          </div>
+
+          <div className="mt-4">
+            <label className="text-sm text-white/60">Mood</label>
+            <div className="mt-2 flex gap-2 overflow-x-auto pb-2 [-webkit-overflow-scrolling:touch]">
+              {moods.map((moodOption) => (
+                <button
+                  key={moodOption}
+                  onClick={() => setMood(moodOption)}
+                  className={`shrink-0 rounded-full border px-4 py-3 text-sm active:scale-95 ${
+                    mood === moodOption
+                      ? "border-white/30 bg-white text-slate-950"
+                      : "border-white/10 bg-white/8 text-white/60"
+                  }`}
+                >
+                  {moodOption}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="h-6" />
+        </div>
+
+        <div className="shrink-0 border-t border-white/10 bg-slate-950/90 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-2xl">
           <button
             onClick={handlePost}
             disabled={!canPost}
@@ -4136,7 +4157,7 @@ function handlePost() {
               canPost ? "bg-white text-slate-950" : "bg-white/10 text-white/30"
             }`}
           >
-            Post to Orbit
+            Post Update
           </button>
         </div>
       </div>
