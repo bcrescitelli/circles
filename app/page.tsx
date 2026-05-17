@@ -201,11 +201,16 @@ type GuestPass = {
   status: "Active" | "Expired";
 };
 
+type CircleCoverType = "gradient" | "image";
+
 type Circle = {
   id: string;
   name: string;
   type: CircleType;
   color: string;
+  coverType?: CircleCoverType;
+  coverImage?: string;
+  coverLabel?: string;
   pulse: "Quiet" | "Warming" | "Active" | "Full Pulse";
   dailyPrompt: string;
   members: Person[];
@@ -223,6 +228,49 @@ const circleColors = [
   "from-lime-300 to-cyan-500",
   "from-yellow-200 to-orange-500",
   "from-teal-300 to-emerald-700",
+];
+
+const circleCoverImages = [
+  {
+    label: "Dinner",
+    url: "https://images.unsplash.com/photo-1528605248644-14dd04022da1?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Friends",
+    url: "https://images.unsplash.com/photo-1491438590914-bc09fcaaf77a?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Night Out",
+    url: "https://images.unsplash.com/photo-1519671482749-fd09be7ccebf?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Beach",
+    url: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "City",
+    url: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Concert",
+    url: "https://images.unsplash.com/photo-1492684223066-81342ee5ff30?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Cozy",
+    url: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Nature",
+    url: "https://images.unsplash.com/photo-1500534314209-a25ddb2bd429?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Travel",
+    url: "https://images.unsplash.com/photo-1500530855697-b586d89ba3ee?auto=format&fit=crop&w=700&q=80",
+  },
+  {
+    label: "Aurora",
+    url: "https://images.unsplash.com/photo-1531366936337-7c912a4589a7?auto=format&fit=crop&w=700&q=80",
+  },
 ];
 
 const avatarColors = [
@@ -266,6 +314,44 @@ function PulseBadge({ pulse }: { pulse: Circle["pulse"] }) {
   return (
     <div className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/80 shadow-inner shadow-white/10">
       {pulse}
+    </div>
+  );
+}
+
+function CircleVisual({
+  circle,
+  size = "md",
+}: {
+  circle: Circle;
+  size?: "sm" | "md" | "lg";
+}) {
+  const sizeClass =
+    size === "sm"
+      ? "h-12 w-12"
+      : size === "lg"
+        ? "h-28 w-28"
+        : "h-16 w-16";
+
+  if (circle.coverType === "image" && circle.coverImage) {
+    return (
+      <div
+        className={`relative ${sizeClass} shrink-0 overflow-hidden rounded-full border border-white/20 shadow-lg shadow-black/30`}
+      >
+        <img
+          src={circle.coverImage}
+          alt={`${circle.name} cover`}
+          className="h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-slate-950/20" />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`grid ${sizeClass} shrink-0 place-items-center rounded-full bg-gradient-to-br ${circle.color} shadow-lg shadow-black/30`}
+    >
+      <div className="h-1/2 w-1/2 rounded-full bg-white/30 blur-sm" />
     </div>
   );
 }
@@ -390,6 +476,9 @@ function cleanCircleFromFirestore(data: FirestoreCircle): Circle {
     name: data.name,
     type: data.type,
     color: data.color,
+    coverType: data.coverType || "gradient",
+    coverImage: data.coverImage,
+    coverLabel: data.coverLabel,
     pulse: data.pulse,
     dailyPrompt: data.dailyPrompt,
     members: data.members || [],
@@ -1685,9 +1774,7 @@ function HomeView({
             }`}
           >
             <div className="grid grid-cols-[4rem_1fr] gap-4">
-              <div className={`grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br ${circle.color} shadow-lg shadow-black/30`}>
-                <div className="h-9 w-9 rounded-full bg-white/30 blur-sm" />
-              </div>
+              <CircleVisual circle={circle} size="md" />
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -1933,9 +2020,9 @@ if (orbitMode === "loop") {
     return (
       <div className="flex h-full flex-col justify-center">
         <div className="rounded-[3rem] border border-white/10 bg-white/8 p-8 text-center shadow-2xl shadow-black/30 backdrop-blur-2xl">
-          <div className={`mx-auto grid h-28 w-28 place-items-center rounded-full bg-gradient-to-br ${circle.color} shadow-xl shadow-black/30`}>
-            <div className="h-14 w-14 rounded-full bg-white/30 blur-sm" />
-          </div>
+          <div className="flex justify-center">
+  <CircleVisual circle={circle} size="lg" />
+</div>
 
           <h2 className="mt-6 text-3xl font-semibold">Empty Orbit</h2>
 
@@ -4319,8 +4406,10 @@ function CreateCircleModal({
 }) {
   const [circleName, setCircleName] = useState("");
   const [selectedColor, setSelectedColor] = useState(circleColors[0]);
+  const [coverType, setCoverType] = useState<CircleCoverType>("gradient");
+  const [selectedCoverImage, setSelectedCoverImage] = useState(circleCoverImages[0]);
   const [selectedPeopleIds, setSelectedPeopleIds] = useState<string[]>([]);
-  const [peopleSearch, setPeopleSearch] = useState("");
+  const [peopleSearch, setPeopleSearch] = useState("");   
 
   const selectedCount = selectedPeopleIds.length;
   const canCreate = circleName.trim().length > 1 && selectedCount >= 1 && selectedCount <= 8;
@@ -4363,6 +4452,9 @@ function CreateCircleModal({
   name: circleName.trim(),
   type: "Close Friends",
   color: selectedColor,
+  coverType,
+  coverImage: coverType === "image" ? selectedCoverImage.url : undefined,
+  coverLabel: coverType === "image" ? selectedCoverImage.label : undefined,
   pulse: "Quiet",
   dailyPrompt: "What is your energy today?",
   members,
@@ -4416,6 +4508,96 @@ function CreateCircleModal({
               ))}
             </div>
           </div>
+
+          <div>
+  <label className="text-sm text-white/60">Circle look</label>
+
+  <div className="mt-2 grid grid-cols-2 gap-2 rounded-full bg-white/8 p-2">
+    <button
+      onClick={() => setCoverType("gradient")}
+      className={`rounded-full px-4 py-3 text-sm font-semibold active:scale-95 ${
+        coverType === "gradient"
+          ? "bg-white text-slate-950"
+          : "text-white/55"
+      }`}
+    >
+      Gradient
+    </button>
+
+    <button
+      onClick={() => setCoverType("image")}
+      className={`rounded-full px-4 py-3 text-sm font-semibold active:scale-95 ${
+        coverType === "image"
+          ? "bg-white text-slate-950"
+          : "text-white/55"
+      }`}
+    >
+      Cover Image
+    </button>
+  </div>
+
+  {coverType === "gradient" && (
+    <div className="mt-4 flex items-center gap-3 rounded-[2rem] border border-white/10 bg-white/8 p-4">
+      <div
+        className={`grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br ${selectedColor} shadow-lg shadow-black/30`}
+      >
+        <div className="h-8 w-8 rounded-full bg-white/30 blur-sm" />
+      </div>
+
+      <div>
+        <p className="text-sm font-semibold">Gradient cover</p>
+        <p className="mt-1 text-xs text-white/45">
+          Simple, abstract, and fast.
+        </p>
+      </div>
+    </div>
+  )}
+
+  {coverType === "image" && (
+    <div className="mt-4 space-y-3">
+      <div className="relative h-36 overflow-hidden rounded-[2rem] border border-white/10 bg-white/8">
+        <img
+          src={selectedCoverImage.url}
+          alt={selectedCoverImage.label}
+          className="h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-slate-950/35" />
+        <div className="absolute bottom-4 left-4 right-4">
+          <p className="text-xs uppercase tracking-[0.22em] text-white/55">
+            Selected cover
+          </p>
+          <p className="mt-1 text-2xl font-semibold text-white">
+            {selectedCoverImage.label}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        {circleCoverImages.map((cover) => (
+          <button
+            key={cover.label}
+            onClick={() => setSelectedCoverImage(cover)}
+            className={`relative h-24 overflow-hidden rounded-[1.5rem] border text-left active:scale-[0.98] ${
+              selectedCoverImage.label === cover.label
+                ? "border-white/60"
+                : "border-white/10"
+            }`}
+          >
+            <img
+              src={cover.url}
+              alt={cover.label}
+              className="h-full w-full object-cover"
+            />
+            <div className="absolute inset-0 bg-slate-950/35" />
+            <span className="absolute bottom-2 left-3 right-3 truncate text-sm font-semibold text-white">
+              {cover.label}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )}
+</div>
 
           <div>
             <div className="flex items-center justify-between">
