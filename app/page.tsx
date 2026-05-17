@@ -89,15 +89,34 @@ type FirestoreFriendRequest = FriendRequest & {
   updatedAt?: unknown;
 };
 
+type PostReaction = {
+  emoji: string;
+  userId: string;
+  userName: string;
+};
+
+type PostReply = {
+  id: string;
+  text: string;
+  userId: string;
+  userName: string;
+  createdAt: string;
+};
+
 type Post = {
   id: string;
   personId: string;
+  personName: string;
+  personInitials: string;
+  personColor: string;
   caption: string;
   time: string;
   mood: string;
   gradient: string;
   prompt: string;
   photoUrl?: string;
+  reactions?: PostReaction[];
+  replies?: PostReply[];
 };
 
 type LoopType = "Plan" | "Trip" | "Event" | "Decision" | "Check In";
@@ -550,6 +569,8 @@ async function createCircle(newCircle: Circle) {
 }
 
 function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
+  if (!currentUser) return;
+
   const gradients = [
     "from-cyan-300 via-blue-500 to-indigo-700",
     "from-fuchsia-300 via-pink-500 to-orange-400",
@@ -560,13 +581,18 @@ function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
 
   const newPost: Post = {
     id: `post-${Date.now()}`,
-    personId: "brandon",
+    personId: currentUser.id,
+    personName: currentUser.name,
+    personInitials: currentUser.initials,
+    personColor: "from-white to-slate-300",
     caption,
     time: "Just now",
     mood,
     prompt: selectedCircle?.dailyPrompt || "What is your energy today?",
     photoUrl,
     gradient: gradients[Math.floor(Math.random() * gradients.length)],
+    reactions: [],
+    replies: [],
   };
 
   updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
@@ -578,6 +604,58 @@ function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
   setSelectedPostIndex(0);
   setIsAddUpdateOpen(false);
   setActiveTab("orbit");
+}
+
+function reactToPost(postId: string, emoji: string) {
+  if (!currentUser || !emoji.trim()) return;
+
+  updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
+    ...circle,
+    posts: circle.posts.map((post) => {
+      if (post.id !== postId) return post;
+
+      const existingReactions = post.reactions || [];
+
+      return {
+        ...post,
+        reactions: [
+          ...existingReactions,
+          {
+            emoji: emoji.trim(),
+            userId: currentUser.id,
+            userName: currentUser.name,
+          },
+        ],
+      };
+    }),
+  }));
+}
+
+function replyToPost(postId: string, text: string) {
+  if (!currentUser || !text.trim()) return;
+
+  updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
+    ...circle,
+    posts: circle.posts.map((post) => {
+      if (post.id !== postId) return post;
+
+      const existingReplies = post.replies || [];
+
+      return {
+        ...post,
+        replies: [
+          ...existingReplies,
+          {
+            id: `reply-${Date.now()}`,
+            text: text.trim(),
+            userId: currentUser.id,
+            userName: currentUser.name,
+            createdAt: "Just now",
+          },
+        ],
+      };
+    }),
+  }));
 }
 
 function addLoopToCircle(loopItem: LoopItem) {
@@ -894,7 +972,7 @@ if (!currentUser) {
   <Header circle={selectedCircle} activeTab={activeTab} />
 )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(7rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(11rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
           {activeTab === "home" && (
             <HomeView
         circles={circles}
@@ -910,17 +988,19 @@ if (!currentUser) {
 
 {activeTab === "orbit" && selectedCircle && (
   <OrbitView
-    circle={selectedCircle}
-    selectedPostIndex={selectedPostIndex}
-    setSelectedPostIndex={setSelectedPostIndex}
-    onOpenAddUpdate={() => setIsAddUpdateOpen(true)}
-    onOpenCreateLoop={() => setIsCreateLoopOpen(true)}
-    onArchiveLoop={archiveLoop}
-    onSetParticipation={setLoopParticipation}
-    onVotePoll={voteOnLoopPoll}
-    onToggleTask={toggleLoopTask}
-    onOpenGuestPass={openGuestPass}
-  />
+  circle={selectedCircle}
+  selectedPostIndex={selectedPostIndex}
+  setSelectedPostIndex={setSelectedPostIndex}
+  onOpenAddUpdate={() => setIsAddUpdateOpen(true)}
+  onOpenCreateLoop={() => setIsCreateLoopOpen(true)}
+  onArchiveLoop={archiveLoop}
+  onSetParticipation={setLoopParticipation}
+  onVotePoll={voteOnLoopPoll}
+  onToggleTask={toggleLoopTask}
+  onOpenGuestPass={openGuestPass}
+  onReactToPost={reactToPost}
+  onReplyToPost={replyToPost}
+/>
 )}
 
 {activeTab === "orbit" && !selectedCircle && (
@@ -981,7 +1061,7 @@ if (!currentUser) {
 {isCreateGuestPassOpen && (
   <CreateGuestPassModal
   circles={circles}
-  contacts={contacts.filter((person) => person.status === "Friend" && person.id !== "brandon")}
+  contacts={contacts.filter((person) => person.status === "Friend")}
   initialCircleId={guestPassContext.circleId}
   initialLoopId={guestPassContext.loopId}
   onClose={() => setIsCreateGuestPassOpen(false)}
@@ -1318,6 +1398,8 @@ function OrbitView({
   onVotePoll,
   onToggleTask,
   onOpenGuestPass,
+  onReactToPost,
+  onReplyToPost,
 }: {
   circle: Circle;
   selectedPostIndex: number;
@@ -1329,17 +1411,26 @@ function OrbitView({
   onVotePoll: (loopId: string, optionId: string, personName: string) => void;
   onToggleTask: (loopId: string, taskId: string) => void;
   onOpenGuestPass: (circleId: string, loopId: string) => void;
+  onReactToPost: (postId: string, emoji: string) => void;
+  onReplyToPost: (postId: string, text: string) => void;
 }) {
   const posts = circle.posts;
   const selectedPost = posts[selectedPostIndex] || posts[0];
-  const selectedPerson = selectedPost ? getPerson(circle, selectedPost.personId) : circle.members[0];
+  const selectedPerson: Person | null = selectedPost
+  ? {
+      id: selectedPost.personId,
+      name: selectedPost.personName,
+      initials: selectedPost.personInitials,
+      color: selectedPost.personColor,
+      status: "Friend",
+    }
+  : null;
   const dialStep = posts.length ? 360 / posts.length : 0;
   const [circularDialAngle, setCircularDialAngle] = useState(0);
   const [orbitMode, setOrbitMode] = useState<"updates" | "loop">("updates");
 const [touchStartX, setTouchStartX] = useState<number | null>(null);
 const [customEmoji, setCustomEmoji] = useState("");
 const [replyText, setReplyText] = useState("");
-const [postReplies, setPostReplies] = useState<Record<string, string[]>>({});
 
 const modeSwitcher = (
   <div className="grid grid-cols-2 gap-2 rounded-full border border-white/10 bg-white/8 p-2 backdrop-blur-2xl">
@@ -1375,19 +1466,20 @@ function handleSwipeEnd(endX: number) {
   setTouchStartX(null);
 }
 
-function addCustomEmojiReaction() {
-  if (!customEmoji.trim()) return;
+function addCustomEmojiReaction(emojiOverride?: string) {
+  if (!selectedPost) return;
+
+  const emojiToUse = emojiOverride || customEmoji.trim();
+  if (!emojiToUse) return;
+
+  onReactToPost(selectedPost.id, emojiToUse);
   setCustomEmoji("");
 }
 
 function addTextReply() {
   if (!selectedPost || !replyText.trim()) return;
 
-  setPostReplies((currentReplies) => ({
-    ...currentReplies,
-    [selectedPost.id]: [...(currentReplies[selectedPost.id] || []), replyText.trim()],
-  }));
-
+  onReplyToPost(selectedPost.id, replyText.trim());
   setReplyText("");
 }
 
@@ -1514,30 +1606,35 @@ if (orbitMode === "loop") {
   }
 
 return (
-  <div className="flex h-full flex-col gap-4">
+  <div
+    className="flex h-full flex-col gap-4"
+    onTouchStart={(event) => setTouchStartX(event.touches[0].clientX)}
+    onTouchEnd={(event) => handleSwipeEnd(event.changedTouches[0].clientX)}
+  >
     {modeSwitcher}
+    <div className="rounded-[1.75rem] border border-white/10 bg-white/8 px-4 py-3 backdrop-blur-2xl">
+  <div className="flex items-center justify-between gap-3">
+    <div className="min-w-0">
+      <p className="text-[10px] uppercase tracking-[0.22em] text-white/35">
+        Today’s Prompt
+      </p>
+      <p className="mt-1 truncate text-sm text-white/70">
+        {circle.dailyPrompt}
+      </p>
+    </div>
+
+    <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs text-white/50">
+      {circle.members.length} people
+    </span>
+  </div>
+</div>
    <div
-  onTouchStart={(event) => setTouchStartX(event.touches[0].clientX)}
-  onTouchEnd={(event) => handleSwipeEnd(event.changedTouches[0].clientX)}
   className="relative h-[430px] shrink-0 overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900/45 shadow-2xl shadow-black/30 backdrop-blur-2xl"
 >
   <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(255,215,235,0.36),transparent_28%),radial-gradient(circle_at_80%_28%,rgba(186,230,253,0.22),transparent_28%),radial-gradient(circle_at_30%_82%,rgba(168,85,247,0.40),transparent_34%),linear-gradient(145deg,rgba(15,23,42,0.95),rgba(30,41,59,0.70))]" />
   <div className="absolute left-1/2 top-[58%] h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-fuchsia-300/10 blur-3xl" />
   <div className="absolute right-[-20%] top-[20%] h-56 w-56 rounded-full bg-cyan-300/10 blur-3xl" />
   <div className="absolute bottom-[-18%] left-[-14%] h-64 w-64 rounded-full bg-violet-400/20 blur-3xl" />
-
-  <div className="absolute right-5 top-[88px] z-[130] grid h-24 w-24 place-items-center rounded-full border border-white/20 bg-white/18 text-center shadow-2xl shadow-black/40 backdrop-blur-2xl">
-  <div>
-    <p className="text-xs uppercase tracking-[0.25em] text-white/45">Today</p>
-    <p className="mt-1 text-base font-semibold">Orbit</p>
-    <p className="mt-1 text-[11px] text-white/50">{circle.members.length} people</p>
-  </div>
-</div>
-
-<div className="absolute left-5 top-[88px] z-[120] max-w-[155px] rounded-[1.5rem] border border-white/10 bg-white/8 px-4 py-3 text-left backdrop-blur-xl">
-  <p className="text-[10px] uppercase tracking-[0.22em] text-white/35">Prompt</p>
-  <p className="mt-1 text-sm leading-5 text-white/75">{circle.dailyPrompt}</p>
-</div>
 
 <button
   onClick={onOpenAddUpdate}
@@ -1548,7 +1645,13 @@ return (
 
         {posts.map((post, index) => {
           const position = getDepthPosition(index);
-          const person = getPerson(circle, post.personId);
+          const person: Person = {
+  id: post.personId,
+  name: post.personName,
+  initials: post.personInitials,
+  color: post.personColor,
+  status: "Friend",
+};
 
           return (
   <button
@@ -1609,9 +1712,9 @@ return (
       {selectedPost && (
         <div className="mt-4 rounded-[2.5rem] border border-white/10 bg-white/10 p-4 shadow-xl shadow-black/20 backdrop-blur-2xl">
           <div className="flex items-center gap-3">
-            <Avatar person={selectedPerson} />
+            {selectedPerson && <Avatar person={selectedPerson} />}
             <div>
-              <h2 className="text-lg font-semibold">{selectedPerson.name}</h2>
+              <h2 className="text-lg font-semibold">{selectedPost.personName}</h2>
               <p className="text-xs text-white/45">
                 {selectedPost.time} · {selectedPost.mood}
               </p>
@@ -1628,7 +1731,7 @@ return (
     <div className="rounded-[2rem] border border-white/25 bg-white/15 p-2 backdrop-blur-md">
       <img
         src={selectedPost.photoUrl}
-        alt={`${selectedPerson.name} update`}
+        alt={`${selectedPost.personName} update`}
         className="h-56 w-full rounded-[1.5rem] object-cover"
       />
     </div>
@@ -1639,12 +1742,13 @@ return (
   <p className="mt-3 text-base leading-6 text-white/90">{selectedPost.caption}</p>
 )}
 
-<div className="mt-5 space-y-3">
-  <div className="flex items-center gap-2">
+<div className="mt-5 space-y-3 pb-24">
+  <div className="flex items-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
     {["❤️", "😂", "👀", "✨"].map((emoji) => (
       <button
         key={emoji}
-        className="grid h-11 w-11 place-items-center rounded-full bg-white/10 text-lg shadow-inner shadow-white/10 active:scale-95"
+        onClick={() => addCustomEmojiReaction(emoji)}
+        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-lg shadow-inner shadow-white/10 active:scale-95"
       >
         {emoji}
       </button>
@@ -1654,16 +1758,29 @@ return (
       value={customEmoji}
       onChange={(event) => setCustomEmoji(event.target.value)}
       placeholder="Any emoji"
-      className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+      className="min-w-[105px] flex-1 rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
     />
 
     <button
-      onClick={addCustomEmojiReaction}
-      className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950 active:scale-95"
+      onClick={() => addCustomEmojiReaction()}
+      className="shrink-0 rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950 active:scale-95"
     >
       React
     </button>
   </div>
+
+  {(selectedPost.reactions || []).length > 0 && (
+    <div className="flex flex-wrap gap-2">
+      {(selectedPost.reactions || []).map((reaction, index) => (
+        <span
+          key={`${selectedPost.id}-reaction-${index}`}
+          className="rounded-full bg-white/8 px-3 py-1 text-sm text-white/70"
+        >
+          {reaction.emoji} {reaction.userName}
+        </span>
+      ))}
+    </div>
+  )}
 
   <div className="flex gap-2">
     <input
@@ -1675,20 +1792,21 @@ return (
 
     <button
       onClick={addTextReply}
-      className="rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 active:scale-95"
+      className="shrink-0 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 active:scale-95"
     >
       Send
     </button>
   </div>
 
-  {(postReplies[selectedPost.id] || []).length > 0 && (
+  {(selectedPost.replies || []).length > 0 && (
     <div className="space-y-2">
-      {(postReplies[selectedPost.id] || []).map((reply, index) => (
+      {(selectedPost.replies || []).map((reply) => (
         <div
-          key={`${selectedPost.id}-reply-${index}`}
+          key={reply.id}
           className="rounded-[1.25rem] bg-white/8 px-4 py-3 text-sm text-white/75"
         >
-          {reply}
+          <p className="text-xs font-semibold text-white/45">{reply.userName}</p>
+          <p className="mt-1">{reply.text}</p>
         </div>
       ))}
     </div>
