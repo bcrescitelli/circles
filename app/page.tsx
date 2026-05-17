@@ -349,6 +349,30 @@ function getPostGradientForUser(userId: string) {
   return gradientOptions[Math.abs(hash) % gradientOptions.length];
 }
 
+const MAX_CIRCLE_NAME_LENGTH = 24;
+
+function getCircleAttentionScore(circle: Circle) {
+  const postScore = circle.posts.length;
+  const reactionScore = circle.posts.reduce(
+    (total, post) => total + (post.reactions?.length || 0),
+    0
+  );
+  const replyScore = circle.posts.reduce(
+    (total, post) => total + (post.replies?.length || 0),
+    0
+  );
+  const activeLoopScore = circle.loop.filter((item) => !item.archived).length;
+
+  return postScore + reactionScore + replyScore * 2 + activeLoopScore;
+}
+
+function getCircleAttentionLabel(score: number) {
+  if (score >= 12) return "High activity";
+  if (score >= 6) return "Active";
+  if (score >= 2) return "New activity";
+  return "";
+}
+
 function Avatar({ person, size = "md" }: { person: Person; size?: "sm" | "md" | "lg" }) {
   const sizeClass = size === "sm" ? "h-9 w-9 text-xs" : size === "lg" ? "h-16 w-16 text-lg" : "h-11 w-11 text-sm";
 
@@ -421,6 +445,7 @@ export default function Home() {
   const [isCreateCircleOpen, setIsCreateCircleOpen] = useState(false);
   const [isAddUpdateOpen, setIsAddUpdateOpen] = useState(false);
   const [isCreateLoopOpen, setIsCreateLoopOpen] = useState(false);
+  const [isCircleSettingsOpen, setIsCircleSettingsOpen] = useState(false);
   const [guestPasses, setGuestPasses] = useState<GuestPass[]>([]);
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
 const [isCreateGuestPassOpen, setIsCreateGuestPassOpen] = useState(false);
@@ -877,6 +902,54 @@ async function createCircle(newCircle: Circle) {
   setActiveTab("orbit");
 
   await saveCircleToFirestore(currentUser.id, sharedCircle);
+}
+
+async function updateCircleSettings(updatedCircle: Circle) {
+  if (!currentUser) return;
+
+  setCircles((currentCircles) =>
+    currentCircles.map((circle) =>
+      circle.id === updatedCircle.id ? updatedCircle : circle
+    )
+  );
+
+  setSelectedCircleId(updatedCircle.id);
+  setIsCircleSettingsOpen(false);
+
+  await saveCircleToFirestore(currentUser.id, updatedCircle);
+}
+
+async function leaveCircle(circleId: string) {
+  if (!currentUser) return;
+
+  const circleToLeave = circles.find((circle) => circle.id === circleId);
+  if (!circleToLeave) return;
+
+  const updatedCircle: Circle = {
+    ...circleToLeave,
+    members: circleToLeave.members.filter(
+      (member) => member.id !== currentUser.id
+    ),
+    memberIds: (circleToLeave.memberIds || []).filter(
+      (memberId) => memberId !== currentUser.id
+    ),
+  };
+
+  await updateDoc(doc(db, "circles", circleId), {
+    ...sanitizeForFirestore(updatedCircle),
+    updatedAt: serverTimestamp(),
+  });
+
+  const remainingCircles = circles.filter((circle) => circle.id !== circleId);
+  setCircles(remainingCircles);
+  setIsCircleSettingsOpen(false);
+  setActiveTab("home");
+
+  if (remainingCircles.length > 0) {
+    setSelectedCircleId(remainingCircles[0].id);
+  } else {
+    setSelectedCircleId("");
+  }
 }
 
 async function uploadPostPhoto(circleId: string, file: File) {
@@ -1399,6 +1472,7 @@ if (!currentUser) {
   setSelectedPostIndex={setSelectedPostIndex}
   onOpenAddUpdate={() => setIsAddUpdateOpen(true)}
   onOpenCreateLoop={() => setIsCreateLoopOpen(true)}
+  onOpenCircleSettings={() => setIsCircleSettingsOpen(true)}
   onArchiveLoop={archiveLoop}
   onSetParticipation={setLoopParticipation}
   onVotePoll={voteOnLoopPoll}
@@ -1449,6 +1523,17 @@ if (!currentUser) {
     onUpdateProfile={handleUpdateProfile}
     onChangePassword={handleChangePassword}
     onSignOut={handleSignOut}
+  />
+)}
+
+{isCircleSettingsOpen && selectedCircle && currentUser && (
+  <CircleSettingsModal
+    circle={selectedCircle}
+    contacts={contacts.filter((person) => person.status === "Friend")}
+    currentUser={currentUser}
+    onClose={() => setIsCircleSettingsOpen(false)}
+    onSave={updateCircleSettings}
+    onLeave={leaveCircle}
   />
 )}
 
@@ -1505,6 +1590,269 @@ if (!currentUser) {
   );
 }
 
+function CircleSettingsModal({
+  circle,
+  contacts,
+  currentUser,
+  onClose,
+  onSave,
+  onLeave,
+}: {
+  circle: Circle;
+  contacts: Person[];
+  currentUser: CurrentUser;
+  onClose: () => void;
+  onSave: (circle: Circle) => void;
+  onLeave: (circleId: string) => void;
+}) {
+  const [circleName, setCircleName] = useState(circle.name);
+  const [selectedPeopleIds, setSelectedPeopleIds] = useState<string[]>(
+    circle.members.map((member) => member.id)
+  );
+  const [peopleSearch, setPeopleSearch] = useState("");
+  const [confirmLeave, setConfirmLeave] = useState(false);
+
+  const availablePeople = contacts.filter(
+    (person) =>
+      person.id !== currentUser.id &&
+      !circle.members.some((member) => member.id === person.id) &&
+      (person.name.toLowerCase().includes(peopleSearch.toLowerCase()) ||
+        person.email?.toLowerCase().includes(peopleSearch.toLowerCase()))
+  );
+
+  const selectedPeople = selectedPeopleIds
+    .map(
+      (personId) =>
+        circle.members.find((member) => member.id === personId) ||
+        contacts.find((person) => person.id === personId)
+    )
+    .filter(Boolean) as Person[];
+
+  const canSave =
+    circleName.trim().length > 1 &&
+    circleName.trim().length <= MAX_CIRCLE_NAME_LENGTH &&
+    selectedPeople.length >= 1 &&
+    selectedPeople.length <= 8;
+
+  function togglePerson(personId: string) {
+    if (personId === currentUser.id) return;
+
+    setSelectedPeopleIds((currentIds) => {
+      if (currentIds.includes(personId)) {
+        return currentIds.filter((id) => id !== personId);
+      }
+
+      if (currentIds.length >= 8) return currentIds;
+
+      return [...currentIds, personId];
+    });
+  }
+
+  function handleSave() {
+    if (!canSave) return;
+
+    const currentUserAsPerson: Person = {
+      id: currentUser.id,
+      name: currentUser.name,
+      initials: currentUser.initials,
+      color: currentUser.avatarColor,
+      status: "Friend",
+      email: currentUser.email,
+    };
+
+    const nextMembers = [
+      currentUserAsPerson,
+      ...selectedPeople.filter((person) => person.id !== currentUser.id),
+    ];
+
+    const updatedCircle: Circle = {
+      ...circle,
+      name: circleName.trim(),
+      members: nextMembers,
+      memberIds: Array.from(new Set(nextMembers.map((member) => member.id))),
+    };
+
+    onSave(updatedCircle);
+  }
+
+  return (
+    <div className="fixed inset-0 z-[260] overflow-hidden bg-slate-950/80 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-2xl">
+      <div className="mx-auto flex h-full max-h-full w-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
+        <div className="shrink-0 border-b border-white/10 bg-slate-950/80 p-4 backdrop-blur-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-white/45">Circle Settings</p>
+              <h2 className="mt-1 text-3xl font-semibold tracking-tight">
+                Manage Circle.
+              </h2>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-xl text-white/70 active:scale-95"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [-webkit-overflow-scrolling:touch]">
+          <div className="rounded-[2rem] border border-white/10 bg-white/8 p-4">
+            <label className="text-sm text-white/60">Circle name</label>
+            <input
+              value={circleName}
+              maxLength={MAX_CIRCLE_NAME_LENGTH}
+              onChange={(event) => setCircleName(event.target.value)}
+              className="mt-2 w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
+            />
+
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="text-white/35">
+                Keep it short so it looks clean on mobile.
+              </span>
+              <span
+                className={
+                  circleName.length >= MAX_CIRCLE_NAME_LENGTH
+                    ? "text-orange-200"
+                    : "text-white/35"
+                }
+              >
+                {circleName.length}/{MAX_CIRCLE_NAME_LENGTH}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-[2rem] border border-white/10 bg-white/8 p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-semibold text-white/75">
+                  Members
+                </p>
+                <p className="mt-1 text-xs text-white/40">
+                  {selectedPeople.length}/8 people
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {selectedPeople.map((person) => {
+                const isCurrentUser = person.id === currentUser.id;
+
+                return (
+                  <button
+                    key={person.id}
+                    onClick={() => togglePerson(person.id)}
+                    disabled={isCurrentUser}
+                    className={`rounded-full px-3 py-2 text-xs font-semibold active:scale-95 ${
+                      isCurrentUser
+                        ? "bg-white text-slate-950"
+                        : "bg-white/10 text-white/65"
+                    }`}
+                  >
+                    {person.name}
+                    {!isCurrentUser && " ×"}
+                  </button>
+                );
+              })}
+            </div>
+
+            {selectedPeople.length < 8 && (
+              <>
+                <div className="mt-5">
+                  <label className="text-sm text-white/60">
+                    Add more People
+                  </label>
+                  <input
+                    value={peopleSearch}
+                    onChange={(event) => setPeopleSearch(event.target.value)}
+                    placeholder="Search your People"
+                    className="mt-2 w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
+                  />
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {availablePeople.slice(0, 6).map((person) => (
+                    <button
+                      key={person.id}
+                      onClick={() => togglePerson(person.id)}
+                      className="flex w-full items-center justify-between rounded-[1.5rem] bg-white/8 p-3 text-left active:scale-[0.99]"
+                    >
+                      <div className="flex items-center gap-3">
+                        <Avatar person={person} size="sm" />
+                        <div>
+                          <p className="text-sm font-semibold">{person.name}</p>
+                          <p className="text-xs text-white/40">
+                            {person.email}
+                          </p>
+                        </div>
+                      </div>
+
+                      <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-950">
+                        Add
+                      </span>
+                    </button>
+                  ))}
+
+                  {availablePeople.length === 0 && (
+                    <p className="rounded-[1.5rem] bg-white/8 px-4 py-3 text-sm text-white/45">
+                      No available People found.
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="mt-4 rounded-[2rem] border border-red-300/20 bg-red-500/10 p-4">
+            <p className="text-sm font-semibold text-red-100">Leave Circle</p>
+            <p className="mt-1 text-xs leading-5 text-red-100/60">
+              You will lose access to this Circle. Other members will still keep it.
+            </p>
+
+            {!confirmLeave ? (
+              <button
+                onClick={() => setConfirmLeave(true)}
+                className="mt-4 w-full rounded-full bg-red-400/20 px-5 py-4 font-semibold text-red-100 active:scale-[0.98]"
+              >
+                Leave Circle
+              </button>
+            ) : (
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => setConfirmLeave(false)}
+                  className="rounded-full bg-white/10 px-5 py-4 font-semibold text-white/65 active:scale-[0.98]"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  onClick={() => onLeave(circle.id)}
+                  className="rounded-full bg-red-300 px-5 py-4 font-semibold text-red-950 active:scale-[0.98]"
+                >
+                  Confirm
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="h-8" />
+        </div>
+
+        <div className="shrink-0 border-t border-white/10 bg-slate-950/90 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-2xl">
+          <button
+            onClick={handleSave}
+            disabled={!canSave}
+            className={`w-full rounded-full px-5 py-4 font-semibold active:scale-[0.98] ${
+              canSave ? "bg-white text-slate-950" : "bg-white/10 text-white/30"
+            }`}
+          >
+            Save Circle
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ProfileModal({
   currentUser,
@@ -1974,28 +2322,58 @@ function HomeView({
       </div>
 
       <div className="grid gap-4">
-        {circles.map((circle) => (
-          <button
-            key={circle.id}
+        {circles.map((circle) => {
+  const attentionScore = getCircleAttentionScore(circle);
+  const attentionLabel = getCircleAttentionLabel(attentionScore);
+  const hasAttention = attentionScore > 0;
+
+  return (
+    <button
+      key={circle.id}
             onClick={() => {
               setSelectedCircleId(circle.id);
               onOpenCircle(circle.id);
             }}
-            className={`group rounded-[2rem] border p-4 text-left shadow-xl shadow-black/25 backdrop-blur-2xl transition active:scale-[0.98] ${
-              selectedCircleId === circle.id ? "border-white/25 bg-white/14" : "border-white/10 bg-white/8"
-            }`}
+            className={`group rounded-[2rem] border p-4 text-left shadow-xl backdrop-blur-2xl transition active:scale-[0.98] ${
+  selectedCircleId === circle.id
+    ? "border-white/25 bg-white/14 shadow-black/25"
+    : hasAttention
+      ? "border-cyan-200/30 bg-cyan-300/10 shadow-cyan-950/30"
+      : "border-white/10 bg-white/8 shadow-black/25"
+}`}
           >
             <div className="grid grid-cols-[4rem_1fr] gap-4">
-              <CircleVisual circle={circle} size="md" />
+              <div
+  className={`transition-transform ${
+    attentionScore >= 12
+      ? "scale-110"
+      : attentionScore >= 6
+        ? "scale-105"
+        : ""
+  }`}
+>
+  <CircleVisual circle={circle} size="md" />
+</div>
 
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
-                  <h3 className="truncate text-lg font-semibold">{circle.name}</h3>
+                  <h3
+  className={`truncate text-lg font-semibold ${
+    hasAttention ? "text-cyan-50" : ""
+  }`}
+>
+  {circle.name}
+</h3>
                   {circle.guest && <span className="rounded-full border border-dashed border-white/30 px-2 py-0.5 text-[10px] text-white/70">Guest</span>}
                 </div>
                 <p className="mt-1 text-sm text-white/50">{circle.type}</p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
   <PulseBadge pulse={circle.pulse} />
+  {hasAttention && (
+  <span className="rounded-full bg-cyan-200 px-3 py-1 text-xs font-semibold text-slate-950">
+    {attentionLabel}
+  </span>
+)}
   <span className="rounded-full bg-white/8 px-3 py-1 text-xs text-white/45">
     {circle.posts.length} posts
   </span>
@@ -2014,7 +2392,8 @@ function HomeView({
               </div>
             </div>
           </button>
-        ))}
+          );
+        })}
       </div>
 
       <div className="rounded-[2rem] border border-white/10 bg-white/8 p-4 backdrop-blur-2xl">
@@ -2042,6 +2421,7 @@ function OrbitView({
   onOpenAddUpdate,
   onOpenCreateLoop,
   onArchiveLoop,
+  onOpenCircleSettings,
   onSetParticipation,
   onVotePoll,
   onToggleTask,
@@ -2054,6 +2434,7 @@ function OrbitView({
   setSelectedPostIndex: (index: number) => void;
   onOpenAddUpdate: () => void;
   onOpenCreateLoop: () => void;
+  onOpenCircleSettings: () => void;
   onArchiveLoop: (loopId: string) => void;
   onSetParticipation: (loopId: string, personName: string, status: ParticipationStatus) => void;
   onVotePoll: (loopId: string, optionId: string, personName: string) => void;
@@ -2254,18 +2635,28 @@ function handleCircularDial(event: PointerEvent<HTMLButtonElement>) {
 
 if (orbitMode === "loop") {
   return (
-    <div className="space-y-4">
+  <div className="space-y-4">
+    <div className="space-y-2">
       {modeSwitcher}
 
-      <LoopView
-        circle={circle}
-        onOpenCreateLoop={onOpenCreateLoop}
-        onArchiveLoop={onArchiveLoop}
-        onSetParticipation={onSetParticipation}
-        onVotePoll={onVotePoll}
-        onToggleTask={onToggleTask}
-        onOpenGuestPass={onOpenGuestPass}
-      />
+      <button
+        onClick={onOpenCircleSettings}
+        className="w-full rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white/60 active:scale-[0.98]"
+      >
+        Manage Circle
+      </button>
+    </div>
+
+    <LoopView
+  circle={circle}
+  onOpenCreateLoop={onOpenCreateLoop}
+  onOpenCircleSettings={onOpenCircleSettings}
+  onArchiveLoop={onArchiveLoop}
+  onSetParticipation={onSetParticipation}
+  onVotePoll={onVotePoll}
+  onToggleTask={onToggleTask}
+  onOpenGuestPass={onOpenGuestPass}
+/>
     </div>
   );
 }
@@ -2296,8 +2687,17 @@ if (orbitMode === "loop") {
   }
 
 return (
-<div className="flex h-full flex-col gap-4">
-    {modeSwitcher}
+  <div className="flex h-full flex-col gap-4">
+    <div className="space-y-2">
+      {modeSwitcher}
+
+      <button
+        onClick={onOpenCircleSettings}
+        className="w-full rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white/60 active:scale-[0.98]"
+      >
+        Manage Circle
+      </button>
+    </div>
     <div className="rounded-[1.75rem] border border-white/10 bg-white/8 px-4 py-3 backdrop-blur-2xl">
   <div className="flex items-center justify-between gap-3">
     <div className="min-w-0">
@@ -2579,6 +2979,7 @@ function LoopView({
   circle,
   onOpenCreateLoop,
   onArchiveLoop,
+  onOpenCircleSettings,
   onSetParticipation,
   onVotePoll,
   onToggleTask,
@@ -2586,6 +2987,7 @@ function LoopView({
 }: {
   circle: Circle;
   onOpenCreateLoop: () => void;
+  onOpenCircleSettings: () => void;
   onArchiveLoop: (loopId: string) => void;
   onSetParticipation: (loopId: string, personName: string, status: ParticipationStatus) => void;
   onVotePoll: (loopId: string, optionId: string, personName: string) => void;
@@ -4667,7 +5069,12 @@ function CreateCircleModal({
   const [peopleSearch, setPeopleSearch] = useState("");   
 
   const selectedCount = selectedPeopleIds.length;
-  const canCreate = circleName.trim().length > 1 && selectedCount >= 1 && selectedCount <= 8;
+  const trimmedCircleName = circleName.trim();
+const canCreate =
+  trimmedCircleName.length > 1 &&
+  trimmedCircleName.length <= MAX_CIRCLE_NAME_LENGTH &&
+  selectedCount >= 1 &&
+  selectedCount <= 8;
   const filteredContacts = contacts.filter((person) =>
   person.name.toLowerCase().includes(peopleSearch.toLowerCase()) ||
   person.email?.toLowerCase().includes(peopleSearch.toLowerCase())
@@ -4703,7 +5110,7 @@ function CreateCircleModal({
 
     const newCircle: Circle = {
   id: `${id}-${Date.now()}`,
-  name: circleName.trim(),
+  name: trimmedCircleName,
   type: "Close Friends",
   color: selectedColor,
   coverType,
@@ -4716,6 +5123,10 @@ function CreateCircleModal({
   loop: [],
   guest: false,
 };
+
+<div className="mt-2 flex justify-end text-xs text-white/35">
+  {circleName.length}/{MAX_CIRCLE_NAME_LENGTH}
+</div>
 
     onCreateCircle(newCircle);
   }
@@ -4741,8 +5152,9 @@ function CreateCircleModal({
           <div>
             <label className="text-sm text-white/60">Circle name</label>
             <input
-              value={circleName}
-              onChange={(event) => setCircleName(event.target.value)}
+  value={circleName}
+  maxLength={MAX_CIRCLE_NAME_LENGTH}
+  onChange={(event) => setCircleName(event.target.value)}
               placeholder="High School Besties"
               className="mt-2 w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
             />
