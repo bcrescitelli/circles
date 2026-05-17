@@ -299,6 +299,48 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 
+function getStableColorFromString(value: string) {
+  const colorOptions = [
+    "from-cyan-300 to-blue-500",
+    "from-lime-300 to-emerald-500",
+    "from-fuchsia-300 to-pink-500",
+    "from-orange-300 to-red-500",
+    "from-violet-300 to-indigo-500",
+    "from-rose-200 to-purple-500",
+    "from-yellow-200 to-orange-500",
+    "from-teal-300 to-cyan-600",
+  ];
+
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = value.charCodeAt(index) + ((hash << 5) - hash);
+  }
+
+  return colorOptions[Math.abs(hash) % colorOptions.length];
+}
+
+function getPostGradientForUser(userId: string) {
+  const gradientOptions = [
+    "from-cyan-300 via-blue-500 to-indigo-700",
+    "from-fuchsia-300 via-pink-500 to-orange-400",
+    "from-lime-300 via-emerald-500 to-teal-700",
+    "from-yellow-200 via-orange-400 to-rose-600",
+    "from-violet-300 via-purple-500 to-slate-900",
+    "from-teal-200 via-cyan-500 to-sky-800",
+    "from-rose-200 via-purple-500 to-indigo-800",
+    "from-amber-200 via-orange-500 to-red-700",
+  ];
+
+  let hash = 0;
+
+  for (let index = 0; index < userId.length; index += 1) {
+    hash = userId.charCodeAt(index) + ((hash << 5) - hash);
+  }
+
+  return gradientOptions[Math.abs(hash) % gradientOptions.length];
+}
+
 function Avatar({ person, size = "md" }: { person: Person; size?: "sm" | "md" | "lg" }) {
   const sizeClass = size === "sm" ? "h-9 w-9 text-xs" : size === "lg" ? "h-16 w-16 text-lg" : "h-11 w-11 text-sm";
 
@@ -832,26 +874,18 @@ async function createCircle(newCircle: Circle) {
 function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
   if (!currentUser) return;
 
-  const gradients = [
-    "from-cyan-300 via-blue-500 to-indigo-700",
-    "from-fuchsia-300 via-pink-500 to-orange-400",
-    "from-lime-300 via-emerald-500 to-teal-700",
-    "from-yellow-200 via-orange-400 to-rose-600",
-    "from-violet-300 via-purple-500 to-slate-900",
-  ];
-
   const newPost: Post = {
     id: `post-${Date.now()}`,
     personId: currentUser.id,
     personName: currentUser.name,
     personInitials: currentUser.initials,
-    personColor: "from-white to-slate-300",
+    personColor: currentUser.avatarColor || getStableColorFromString(currentUser.id),
     caption,
     time: "Just now",
     mood,
     prompt: selectedCircle?.dailyPrompt || "What is your energy today?",
     photoUrl,
-    gradient: gradients[Math.floor(Math.random() * gradients.length)],
+    gradient: getPostGradientForUser(currentUser.id),
     reactions: [],
     replies: [],
   };
@@ -870,6 +904,9 @@ function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
 function reactToPost(postId: string, emoji: string) {
   if (!currentUser || !emoji.trim()) return;
 
+  const cleanedEmoji = emoji.trim();
+  const maxReactionsPerPerson = 3;
+
   updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
     ...circle,
     posts: circle.posts.map((post) => {
@@ -877,12 +914,39 @@ function reactToPost(postId: string, emoji: string) {
 
       const existingReactions = post.reactions || [];
 
+      const alreadyReactedWithEmoji = existingReactions.some(
+        (reaction) =>
+          reaction.userId === currentUser.id &&
+          reaction.emoji === cleanedEmoji
+      );
+
+      if (alreadyReactedWithEmoji) {
+        return {
+          ...post,
+          reactions: existingReactions.filter(
+            (reaction) =>
+              !(
+                reaction.userId === currentUser.id &&
+                reaction.emoji === cleanedEmoji
+              )
+          ),
+        };
+      }
+
+      const userReactionCount = existingReactions.filter(
+        (reaction) => reaction.userId === currentUser.id
+      ).length;
+
+      if (userReactionCount >= maxReactionsPerPerson) {
+        return post;
+      }
+
       return {
         ...post,
         reactions: [
           ...existingReactions,
           {
-            emoji: emoji.trim(),
+            emoji: cleanedEmoji,
             userId: currentUser.id,
             userName: currentUser.name,
           },
@@ -1985,6 +2049,8 @@ function OrbitView({
   const [circularDialAngle, setCircularDialAngle] = useState(0);
   const [orbitMode, setOrbitMode] = useState<"updates" | "loop">("updates");
 const [touchStartX, setTouchStartX] = useState<number | null>(null);
+const [dragOffsetX, setDragOffsetX] = useState(0);
+const [isDraggingOrbit, setIsDraggingOrbit] = useState(false);
 const [customEmoji, setCustomEmoji] = useState("");
 const [replyText, setReplyText] = useState("");
 
@@ -2010,16 +2076,33 @@ const modeSwitcher = (
   </div>
 );
 
+function handleSwipeStart(startX: number) {
+  setTouchStartX(startX);
+  setDragOffsetX(0);
+  setIsDraggingOrbit(true);
+}
+
+function handleSwipeMove(currentX: number) {
+  if (touchStartX === null) return;
+
+  const nextOffset = currentX - touchStartX;
+  const clampedOffset = Math.max(-120, Math.min(120, nextOffset));
+
+  setDragOffsetX(clampedOffset);
+}
+
 function handleSwipeEnd(endX: number) {
   if (touchStartX === null) return;
 
   const delta = touchStartX - endX;
 
-  if (Math.abs(delta) > 40) {
+  if (Math.abs(delta) > 45) {
     moveDial(delta > 0 ? "next" : "prev");
   }
 
   setTouchStartX(null);
+  setDragOffsetX(0);
+  setIsDraggingOrbit(false);
 }
 
 function addCustomEmojiReaction(emojiOverride?: string) {
@@ -2059,7 +2142,8 @@ function choosePost(index: number) {
   function getDepthPosition(index: number) {
     const count = posts.length || 1;
     const step = (Math.PI * 2) / count;
-    const angle = step * (index - selectedPostIndex);
+    const dragProgress = posts.length > 1 ? dragOffsetX / 180 : 0;
+const angle = step * (index - selectedPostIndex + dragProgress);
 
     const x = Math.sin(angle) * 128;
     const y = Math.cos(angle) * 46 + 46;
@@ -2163,10 +2247,11 @@ if (orbitMode === "loop") {
 
 return (
   <div
-    className="flex h-full flex-col gap-4"
-    onTouchStart={(event) => setTouchStartX(event.touches[0].clientX)}
-    onTouchEnd={(event) => handleSwipeEnd(event.changedTouches[0].clientX)}
-  >
+  className="flex h-full flex-col gap-4"
+  onTouchStart={(event) => handleSwipeStart(event.touches[0].clientX)}
+  onTouchMove={(event) => handleSwipeMove(event.touches[0].clientX)}
+  onTouchEnd={(event) => handleSwipeEnd(event.changedTouches[0].clientX)}
+>
     {modeSwitcher}
     <div className="rounded-[1.75rem] border border-white/10 bg-white/8 px-4 py-3 backdrop-blur-2xl">
   <div className="flex items-center justify-between gap-3">
@@ -2213,7 +2298,9 @@ return (
   <button
     key={post.id}
     onClick={() => choosePost(index)}
-    className="absolute left-1/2 top-[55%] grid h-32 w-32 place-items-center transition-all duration-500 ease-out active:scale-95"
+    className={`absolute left-1/2 top-[47%] grid h-32 w-32 place-items-center active:scale-95 ${
+  isDraggingOrbit ? "transition-none" : "transition-all duration-500 ease-out"
+}`}
     style={{
       transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px)) scale(${position.scale})`,
       opacity: position.opacity,
@@ -2252,14 +2339,14 @@ return (
 
         <button
           onClick={() => moveDial("prev")}
-          className="absolute bottom-5 left-5 z-[120] grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-white/10 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+          className="absolute bottom-4 left-5 z-[120] grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-slate-950/35 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
         >
           ‹
         </button>
 
         <button
           onClick={() => moveDial("next")}
-          className="absolute bottom-5 right-5 z-[120] grid h-12 w-12 place-items-center rounded-full border border-white/10 bg-white/10 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+          className="absolute bottom-4 right-5 z-[120] grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-slate-950/35 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
         >
           ›
         </button>
