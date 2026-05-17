@@ -4055,7 +4055,7 @@ function SelectedPostCard({
 
   return (
     <div className="rounded-[2.25rem] bg-white/[0.06] p-3 shadow-inner shadow-white/5">
-      <div className="grid grid-cols-[40%_1fr] gap-3">
+      <div className="grid grid-cols-[39%_1fr] gap-3">
         <div className="min-w-0">
           <div
             className={`relative aspect-[0.95] overflow-hidden rounded-[56%_42%_48%_38%/42%_56%_44%_58%] border border-cyan-200/50 bg-gradient-to-br ${post.gradient} shadow-xl shadow-black/25`}
@@ -4098,27 +4098,6 @@ function SelectedPostCard({
               </p>
             </div>
           </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-1.5">
-            {reactionOptions.map((emoji) => {
-              const count = getReactionCount(emoji);
-              const active = hasReacted(emoji);
-
-              return (
-                <button
-                  key={emoji}
-                  onClick={() => onReact(emoji)}
-                  className={`h-9 rounded-full px-2 text-xs font-semibold active:scale-95 ${
-                    active
-                      ? "bg-white text-slate-950"
-                      : "bg-white/10 text-white/65"
-                  }`}
-                >
-                  {emoji} {count}
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         <div className="min-w-0">
@@ -4126,7 +4105,7 @@ function SelectedPostCard({
             Post
           </p>
 
-          <p className="mt-2 line-clamp-4 text-sm leading-5 text-white/85">
+          <p className="mt-2 line-clamp-3 text-sm leading-5 text-white/85">
             {post.caption || "No caption yet."}
           </p>
 
@@ -4220,11 +4199,32 @@ function SelectedPostCard({
               View All
             </button>
           </div>
-
-          <button className="mt-3 text-xs font-semibold text-white/25">
-            Report post
-          </button>
         </div>
+      </div>
+
+      <div className="mt-3 flex items-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+        {reactionOptions.map((emoji) => {
+          const count = getReactionCount(emoji);
+          const active = hasReacted(emoji);
+
+          return (
+            <button
+              key={emoji}
+              onClick={() => onReact(emoji)}
+              className={`h-10 min-w-[70px] shrink-0 rounded-full px-3 text-sm font-semibold active:scale-95 ${
+                active
+                  ? "bg-white text-slate-950"
+                  : "bg-white/10 text-white/65"
+              }`}
+            >
+              {emoji} {count}
+            </button>
+          );
+        })}
+
+        <button className="ml-auto shrink-0 text-xs font-semibold text-white/25">
+          Report
+        </button>
       </div>
     </div>
   );
@@ -4521,7 +4521,7 @@ return (
     <div className="relative overflow-hidden rounded-[2.75rem] border border-white/10 bg-slate-900/50 p-3 shadow-2xl shadow-black/30 backdrop-blur-2xl">
   {selectedPost && (
     <div
-      className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${selectedPost.gradient} opacity-[0.18] blur-2xl transition-all duration-500`}
+      className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${selectedPost.gradient} opacity-[0.32] blur-2xl transition-all duration-500`}
     />
   )}
 
@@ -4551,7 +4551,7 @@ return (
         setTouchStartX(null);
       }}
     >
-      <div className="absolute left-1/2 top-[38%] h-32 w-32 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/8 blur-3xl" />
+      <div className="absolute left-1/2 top-[34%] h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/10 blur-3xl" />
 
       {posts.map((post, index) => {
         const position = getDepthPosition(index);
@@ -4563,9 +4563,9 @@ return (
             key={post.id}
             type="button"
             onClick={() => choosePost(index)}
-            className={`absolute left-1/2 top-[46%] grid h-22 w-22 place-items-center active:scale-95 ${
-              isDraggingOrbit ? "transition-none" : "transition-all duration-500 ease-out"
-            }`}
+            className={`absolute left-1/2 top-[34%] grid h-[5.4rem] w-[5.4rem] place-items-center active:scale-95 ${
+  isDraggingOrbit ? "transition-none" : "transition-all duration-500 ease-out"
+}`}
             style={{
               transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px)) scale(${position.scale})`,
               opacity: position.opacity,
@@ -4580,6 +4580,18 @@ return (
       : "border-white/10 shadow-black/30"
   }`}
 >
+
+  <div
+  className={`pointer-events-none absolute -inset-7 rounded-[45%_55%_50%_40%/55%_45%_55%_45%] bg-gradient-to-br ${post.gradient} blur-2xl transition-all duration-500 ${
+    isActive ? "opacity-75 scale-110" : "opacity-35 scale-95"
+  }`}
+/>
+
+<div
+  className={`pointer-events-none absolute -inset-4 rounded-[60%_40%_45%_55%/45%_60%_40%_55%] bg-gradient-to-tr ${post.personColor} blur-xl transition-all duration-500 ${
+    isActive ? "opacity-55" : "opacity-25"
+  }`}
+/>
 
 <div
   className={`absolute inset-0 rounded-full bg-gradient-to-br ${post.gradient}`}
