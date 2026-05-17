@@ -554,6 +554,58 @@ async function loadIncomingFriendRequests(email: string) {
   );
 }
 
+async function loadAcceptedOutgoingFriendRequests(userId: string) {
+  const requestsQuery = query(
+    collection(db, "friendRequests"),
+    where("fromUserId", "==", userId),
+    where("status", "==", "accepted")
+  );
+
+  const snapshot = await getDocs(requestsQuery);
+
+  return snapshot.docs.map((requestDoc) =>
+    cleanFriendRequestFromFirestore(
+      requestDoc.id,
+      requestDoc.data() as FirestoreFriendRequest
+    )
+  );
+}
+
+async function reconcileAcceptedOutgoingRequests(
+  userId: string,
+  loadedPeople: Person[],
+  acceptedRequests: FriendRequest[]
+) {
+  if (acceptedRequests.length === 0) return loadedPeople;
+
+  let nextPeople = [...loadedPeople];
+
+  for (const request of acceptedRequests) {
+    const matchingPerson = nextPeople.find(
+      (person) =>
+        person.id === request.fromPersonId ||
+        person.email?.toLowerCase() === request.toEmail.toLowerCase()
+    );
+
+    if (!matchingPerson) continue;
+
+    if (matchingPerson.status !== "Friend") {
+      const updatedPerson: Person = {
+        ...matchingPerson,
+        status: "Friend",
+      };
+
+      nextPeople = nextPeople.map((person) =>
+        person.id === matchingPerson.id ? updatedPerson : person
+      );
+
+      await savePersonToFirestore(userId, updatedPerson);
+    }
+  }
+
+  return nextPeople;
+}
+
 async function savePersonToFirestore(userId: string, person: Person) {
   await setDoc(
     doc(db, "users", userId, "people", person.id),
@@ -633,14 +685,22 @@ async function loadAppDataFromFirestore(userId: string, email: string) {
     loadedCircles,
     loadedGuestPasses,
     loadedIncomingRequests,
+    loadedAcceptedOutgoingRequests,
   ] = await Promise.all([
     loadPeopleFromFirestore(userId),
     loadCirclesFromFirestore(userId),
     loadGuestPassesFromFirestore(userId),
     loadIncomingFriendRequests(email),
+    loadAcceptedOutgoingFriendRequests(userId),
   ]);
 
-  setContacts(loadedPeople);
+  const reconciledPeople = await reconcileAcceptedOutgoingRequests(
+    userId,
+    loadedPeople,
+    loadedAcceptedOutgoingRequests
+  );
+
+  setContacts(reconciledPeople);
   setCircles(loadedCircles);
   setGuestPasses(loadedGuestPasses);
   setIncomingRequests(loadedIncomingRequests);
@@ -932,12 +992,19 @@ async function addPersonToPeople(
   email: string,
   _status: ContactStatus
 ) {
-  const trimmedName = name.trim();
   const trimmedEmail = email.trim().toLowerCase();
+  const trimmedName = name.trim();
 
-  if (!trimmedName || !trimmedEmail) return;
+  if (!trimmedEmail) return;
 
-  const initials = trimmedName
+  const displayName =
+    trimmedName ||
+    trimmedEmail
+      .split("@")[0]
+      .replace(/[._-]/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+  const initials = displayName
     .split(" ")
     .map((part) => part[0])
     .join("")
@@ -955,7 +1022,7 @@ async function addPersonToPeople(
 
   const newPerson: Person = {
     id: `person-${Date.now()}`,
-    name: trimmedName,
+    name: displayName,
     email: trimmedEmail,
     initials: initials || "??",
     color: colorOptions[Math.floor(Math.random() * colorOptions.length)],
@@ -1009,10 +1076,11 @@ async function acceptFriendRequest(request: FriendRequest) {
   await savePersonToFirestore(currentUser.id, requesterAsPerson);
 
   await updateDoc(doc(db, "friendRequests", request.id), {
-    status: "accepted",
-    toUserId: currentUser.id,
-    updatedAt: serverTimestamp(),
-  });
+  status: "accepted",
+  toUserId: currentUser.id,
+  toName: currentUser.name,
+  updatedAt: serverTimestamp(),
+});
 
 
   setContacts((currentContacts) => {
@@ -3172,7 +3240,7 @@ function PeopleView({
           Your private social layer.
         </h2>
         <p className="mt-3 text-sm leading-6 text-white/55">
-          Your People are the friends you can add to Circles or invite into a specific Loop.
+          Your People are friends who have accepted your request. Pending requests cannot be added to Circles yet.
         </p>
 
         <button
@@ -3292,88 +3360,75 @@ function AddPersonModal({
   onClose: () => void;
   onAddPerson: (name: string, email: string, status: ContactStatus) => void;
 }) {
-const [name, setName] = useState("");
-const [email, setEmail] = useState("");
-const [status, setStatus] = useState<ContactStatus>("Pending");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
 
-const canAdd = name.trim().length > 1 && email.trim().includes("@");
+  const canAdd = email.trim().includes("@");
 
   return (
-    <div className="absolute inset-0 z-[260] bg-slate-950/70 px-5 py-8 backdrop-blur-2xl">
-      <div className="flex h-full flex-col rounded-[3rem] border border-white/10 bg-slate-950/85 p-5 shadow-2xl shadow-black">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-sm text-white/45">People</p>
-            <h2 className="mt-1 text-3xl font-semibold tracking-tight">
-              Add someone.
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-white/45">
-  Add someone by email. They will see a request in People when they sign up or sign in.
-</p>
-          </div>
+    <div className="fixed inset-0 z-[260] overflow-hidden bg-slate-950/80 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-2xl">
+      <div className="mx-auto flex h-full max-h-full w-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
+        <div className="shrink-0 border-b border-white/10 bg-slate-950/80 p-4 backdrop-blur-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-white/45">People</p>
+              <h2 className="mt-1 text-3xl font-semibold tracking-tight">
+                Send a request.
+              </h2>
+              <p className="mt-2 text-sm leading-6 text-white/45">
+                Invite someone to become one of Your People. Once they accept, you can add each other to Circles.
+              </p>
+            </div>
 
-          <button
-            onClick={onClose}
-            className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-xl text-white/70 active:scale-95"
-          >
-            ×
-          </button>
+            <button
+              onClick={onClose}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-xl text-white/70 active:scale-95"
+            >
+              ×
+            </button>
+          </div>
         </div>
 
-        <div className="mt-6 space-y-5">
-          <div>
-            <label className="text-sm text-white/60">Name</label>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [-webkit-overflow-scrolling:touch]">
+          <div className="rounded-[2rem] border border-white/10 bg-white/8 p-4">
+            <label className="text-sm text-white/60">Email</label>
             <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Person name"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="person@email.com"
               className="mt-2 w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
             />
-          </div>
 
-          <div>
-  <label className="text-sm text-white/60">Email</label>
-  <input
-    type="email"
-    value={email}
-    onChange={(event) => setEmail(event.target.value)}
-    placeholder="person@email.com"
-    className="mt-2 w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
-  />
-  <p className="mt-2 text-xs leading-5 text-white/40">
-    In production, this will send an invite email with a signup link.
-  </p>
-</div>
-
-          <div>
-            <label className="text-sm text-white/60">Status</label>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {(["Friend", "Pending", "Guest", "Suggested"] as ContactStatus[]).map((item) => (
-                <button
-                  key={item}
-                  onClick={() => setStatus(item)}
-                  className={`rounded-full border px-4 py-3 text-sm active:scale-95 ${
-                    status === item
-                      ? "border-white/30 bg-white text-slate-950"
-                      : "border-white/10 bg-white/8 text-white/65"
-                  }`}
-                >
-                  {item}
-                </button>
-              ))}
+            <div className="mt-4">
+              <label className="text-sm text-white/60">
+                Name <span className="text-white/30">(optional)</span>
+              </label>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="John"
+                className="mt-2 w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
+              />
             </div>
+
+            <p className="mt-4 text-xs leading-5 text-white/40">
+              For this beta, they will see the request when they sign up or sign in with this email.
+            </p>
           </div>
         </div>
 
-        <button
-          onClick={() => onAddPerson(name, email, status)}
-          disabled={!canAdd}
-          className={`mt-auto w-full rounded-full px-5 py-4 font-semibold active:scale-[0.98] ${
-            canAdd ? "bg-white text-slate-950" : "bg-white/10 text-white/30"
-          }`}
-        >
-          Add Person
-        </button>
+        <div className="shrink-0 border-t border-white/10 bg-slate-950/90 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-2xl">
+          <button
+            onClick={() => onAddPerson(name, email, "Pending")}
+            disabled={!canAdd}
+            className={`w-full rounded-full px-5 py-4 font-semibold active:scale-[0.98] ${
+              canAdd ? "bg-white text-slate-950" : "bg-white/10 text-white/30"
+            }`}
+          >
+            Send Request
+          </button>
+        </div>
       </div>
     </div>
   );
