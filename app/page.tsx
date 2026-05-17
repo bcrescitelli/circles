@@ -3208,7 +3208,9 @@ function CirclesView({
   onCreateCircle: () => void;
 }) {
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"All" | "Active" | "Loops" | "Quiet">("All");
+  const [filter, setFilter] = useState<
+  "All" | "Active" | "Loops" | "Quiet" | "Upcoming"
+>("All");
 
   const filteredCircles = circles.filter((circle) => {
     const matchesSearch = circle.name
@@ -3217,12 +3219,14 @@ function CirclesView({
 
     const activePosts = getActivePosts(circle);
     const activeLoops = circle.loop.filter((item) => !item.archived);
+    const upcomingLoops = activeLoops.filter(isLoopComingSoon);
 
     const matchesFilter =
-      filter === "All" ||
-      (filter === "Active" && activePosts.length > 0) ||
-      (filter === "Loops" && activeLoops.length > 0) ||
-      (filter === "Quiet" && activePosts.length === 0 && activeLoops.length === 0);
+  filter === "All" ||
+  (filter === "Active" && activePosts.length > 0) ||
+  (filter === "Loops" && activeLoops.length > 0) ||
+  (filter === "Upcoming" && upcomingLoops.length > 0) ||
+  (filter === "Quiet" && activePosts.length === 0 && activeLoops.length === 0);
 
     return matchesSearch && matchesFilter;
   });
@@ -3253,7 +3257,7 @@ function CirclesView({
       />
 
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {(["All", "Active", "Loops", "Quiet"] as const).map((item) => (
+        {(["All", "Active", "Loops", "Upcoming", "Quiet"] as const).map((item) => (
           <button
             key={item}
             onClick={() => setFilter(item)}
@@ -3270,9 +3274,12 @@ function CirclesView({
 
       <div className="space-y-3">
         {filteredCircles.map((circle) => {
-          const activePosts = getActivePosts(circle);
-          const activeLoops = circle.loop.filter((item) => !item.archived);
-          const hasActivity = activePosts.length > 0 || activeLoops.length > 0;
+         const activePosts = getActivePosts(circle);
+        const activeLoops = circle.loop.filter((item) => !item.archived);
+        const upcomingLoops = activeLoops.filter(isLoopComingSoon);
+        const hasActivity = activePosts.length > 0 || activeLoops.length > 0;
+        const attentionScore = getCircleAttentionScore(circle);
+        const attentionLabel = getCircleAttentionLabel(attentionScore);
 
           return (
             <button
@@ -3301,12 +3308,36 @@ function CirclesView({
                   </div>
 
                   <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/45">
-                    <span>{activePosts.length} active posts</span>
-                    <span>•</span>
-                    <span>{activeLoops.length} active Loops</span>
-                    <span>•</span>
-                    <span>{circle.members.length}/8 people</span>
-                  </div>
+  <span>{activeLoops.length} active Loops</span>
+  <span>•</span>
+  <span>{circle.members.length}/8 people</span>
+  {upcomingLoops.length > 0 && (
+    <>
+      <span>•</span>
+      <span>{upcomingLoops.length} coming soon</span>
+    </>
+  )}
+</div>
+
+<div className="mt-3 flex items-center justify-between gap-3">
+  <div className="flex items-center">
+    {circle.members.slice(0, 5).map((person, index) => (
+      <div
+        key={person.id}
+        className="-ml-2 first:ml-0"
+        style={{ zIndex: 10 - index }}
+      >
+        <Avatar person={person} size="sm" />
+      </div>
+    ))}
+  </div>
+
+  {attentionLabel && (
+    <span className="shrink-0 rounded-full bg-cyan-200 px-3 py-1 text-[11px] font-semibold text-slate-950">
+      {attentionLabel}
+    </span>
+  )}
+</div>
                 </div>
               </div>
             </button>
@@ -3572,11 +3603,9 @@ function OrbitBriefView({
 
 function HomeView({
   circles,
-  currentUser,
   onOpenCircle,
   selectedCircleId,
   onCreateCircle,
-  onOpenProfile,
   onViewAllCircles,
 }: {
   circles: Circle[];
@@ -3717,6 +3746,180 @@ function HomeView({
   );
 }
 
+function SelectedPostCard({
+  post,
+  person,
+  customEmoji,
+  replyText,
+  onCustomEmojiChange,
+  onReplyTextChange,
+  onReact,
+  onReply,
+}: {
+  post: Post;
+  person?: Person;
+  customEmoji: string;
+  replyText: string;
+  onCustomEmojiChange: (value: string) => void;
+  onReplyTextChange: (value: string) => void;
+  onReact: (emoji?: string) => void;
+  onReply: () => void;
+}) {
+  const reactions = post.reactions || [];
+  const replies = post.replies || [];
+  const topReplies = replies.slice(0, 4);
+  const hiddenReplyCount = Math.max(0, replies.length - topReplies.length);
+
+  return (
+    <div className="rounded-[2.25rem] border border-white/10 bg-white/10 p-3 shadow-xl shadow-black/25 backdrop-blur-2xl">
+      <div className="flex min-h-[190px] gap-3">
+        <div className="relative w-[38%] min-w-[118px]">
+          <div className={`h-full min-h-[190px] overflow-hidden rounded-[2rem_4.5rem_4.5rem_2rem] border border-white/15 bg-gradient-to-br ${post.gradient} shadow-xl shadow-black/25`}>
+            {post.photoUrl ? (
+              <img
+                src={post.photoUrl}
+                alt={`${post.personName} update`}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="grid h-full w-full place-items-center">
+                <div className={`grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-xl font-black text-slate-950 shadow-xl shadow-black/25`}>
+                  {post.personInitials}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {reactions.slice(0, 6).map((reaction, index) => {
+            const positions = [
+              "right-[-14px] top-5",
+              "right-[-22px] top-14",
+              "right-[-20px] top-[5.75rem]",
+              "right-[-8px] top-[8.25rem]",
+              "right-[8px] bottom-5",
+              "right-[28px] bottom-1",
+            ];
+
+            return (
+              <div
+                key={`${reaction.userId}-${reaction.emoji}-${index}`}
+                className={`absolute ${positions[index]} grid h-8 w-8 place-items-center rounded-full border border-white/20 bg-slate-950/75 text-sm shadow-lg shadow-black/30 backdrop-blur-xl`}
+                title={reaction.userName}
+              >
+                {reaction.emoji}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="min-w-0 flex-1 py-1 pl-1 pr-1">
+          <div className="flex items-start gap-2">
+            {person ? (
+              <Avatar person={person} size="sm" />
+            ) : (
+              <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-xs font-black text-slate-950`}>
+                {post.personInitials}
+              </div>
+            )}
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{post.personName}</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-white/40">{post.time}</span>
+                <span className="rounded-full bg-white/8 px-2 py-1 text-[10px] font-semibold text-white/50">
+                  {getPostExpirationLabel(post)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {post.caption ? (
+            <p className="mt-3 line-clamp-4 text-sm leading-5 text-white/85">
+              {post.caption}
+            </p>
+          ) : (
+            <p className="mt-3 text-sm leading-5 text-white/40">
+              No caption yet.
+            </p>
+          )}
+
+          {topReplies.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {topReplies.map((reply) => (
+                <div
+                  key={reply.id}
+                  className="rounded-[1rem] bg-white/8 px-3 py-2"
+                >
+                  <p className="text-[11px] font-semibold text-white/55">
+                    {reply.userName}
+                  </p>
+                  <p className="mt-1 text-xs leading-4 text-white/75">
+                    {reply.text}
+                  </p>
+                </div>
+              ))}
+
+              {hiddenReplyCount > 0 && (
+                <button className="text-xs font-semibold text-white/45">
+                  View {hiddenReplyCount} more
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 rounded-[1.5rem] bg-white/8 p-3">
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
+          {["❤️", "😂", "👀", "✨"].map((emoji) => (
+            <button
+              key={emoji}
+              onClick={() => onReact(emoji)}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10 text-lg shadow-inner shadow-white/10 active:scale-95"
+            >
+              {emoji}
+            </button>
+          ))}
+
+          <input
+            value={customEmoji}
+            onChange={(event) => onCustomEmojiChange(event.target.value)}
+            placeholder="Any emoji"
+            className="min-w-[96px] flex-1 rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+          />
+
+          <button
+            onClick={() => onReact()}
+            className="shrink-0 rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950 active:scale-95"
+          >
+            React
+          </button>
+        </div>
+
+        <div className="mt-3 flex gap-2">
+          <input
+            value={replyText}
+            onChange={(event) => onReplyTextChange(event.target.value)}
+            placeholder="Reply with a message"
+            className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
+          />
+
+          <button
+            onClick={onReply}
+            className="shrink-0 rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950 active:scale-95"
+          >
+            Send
+          </button>
+        </div>
+
+        <button className="mt-3 text-xs font-semibold text-white/30">
+          Report post
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function OrbitView({
   circle,
   selectedPostIndex,
@@ -3769,23 +3972,26 @@ const [customEmoji, setCustomEmoji] = useState("");
 const [replyText, setReplyText] = useState("");
 
 const modeSwitcher = (
-  <div className="grid grid-cols-2 gap-2 rounded-full border border-white/10 bg-white/8 p-2 backdrop-blur-2xl">
+  <div className="grid grid-cols-2 gap-2">
     <button
-      onClick={() => setOrbitMode("updates")}
-      className={`rounded-full px-4 py-3 text-sm font-semibold active:scale-95 ${
-        orbitMode === "updates" ? "bg-white text-slate-950" : "text-white/55"
-      }`}
+      onClick={() => {
+        setOrbitMode("updates");
+        onOpenAddUpdate();
+      }}
+      className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950 active:scale-95"
     >
-      Updates
+      Add Post
     </button>
 
     <button
       onClick={() => setOrbitMode("loop")}
-      className={`rounded-full px-4 py-3 text-sm font-semibold active:scale-95 ${
-        orbitMode === "loop" ? "bg-white text-slate-950" : "text-white/55"
+      className={`rounded-full border border-white/10 px-4 py-3 text-sm font-semibold active:scale-95 ${
+        orbitMode === "loop"
+          ? "bg-white text-slate-950"
+          : "bg-white/8 text-white/65"
       }`}
     >
-      Loop
+      Manage Loops
     </button>
   </div>
 );
@@ -3941,13 +4147,6 @@ if (orbitMode === "loop") {
   <div className="space-y-4">
     <div className="space-y-2">
       {modeSwitcher}
-
-      <button
-        onClick={onOpenCircleSettings}
-        className="w-full rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white/60 active:scale-[0.98]"
-      >
-        Manage Circle
-      </button>
     </div>
 
     <LoopView
@@ -3972,17 +4171,17 @@ if (orbitMode === "loop") {
   <CircleVisual circle={circle} size="lg" />
 </div>
 
-          <h2 className="mt-6 text-3xl font-semibold">Empty Orbit</h2>
+          <h2 className="mt-6 text-3xl font-semibold">No posts yet.</h2>
 
           <p className="mt-3 text-sm leading-6 text-white/55">
-            This Circle is ready. Add your first update to start today’s Orbit.
+            Start the Circle with a quick post or create a Loop.
           </p>
 
           <button
             onClick={onOpenAddUpdate}
             className="mt-6 w-full rounded-full bg-white px-5 py-4 font-semibold text-slate-950 active:scale-[0.98]"
           >
-            Add Update
+            Add Post
           </button>
         </div>
       </div>
@@ -3993,32 +4192,9 @@ return (
   <div className="flex h-full flex-col gap-4">
     <div className="space-y-2">
       {modeSwitcher}
-
-      <button
-        onClick={onOpenCircleSettings}
-        className="w-full rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white/60 active:scale-[0.98]"
-      >
-        Manage Circle
-      </button>
     </div>
-    <div className="rounded-[1.75rem] border border-white/10 bg-white/8 px-4 py-3 backdrop-blur-2xl">
-  <div className="flex items-center justify-between gap-3">
-    <div className="min-w-0">
-      <p className="text-[10px] uppercase tracking-[0.22em] text-white/35">
-        Today’s Prompt
-      </p>
-      <p className="mt-1 truncate text-sm text-white/70">
-        {circle.dailyPrompt}
-      </p>
-    </div>
-
-    <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs text-white/50">
-      {circle.members.length} people
-    </span>
-  </div>
-</div>
    <div
-  className="relative h-[430px] shrink-0 touch-pan-y overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900/45 shadow-2xl shadow-black/30 backdrop-blur-2xl"
+className="relative h-[310px] shrink-0 touch-pan-y overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-900/45 shadow-2xl shadow-black/30 backdrop-blur-2xl"
   onTouchStart={(event) =>
     handleOrbitSwipeStart(
       event.touches[0].clientX,
@@ -4045,7 +4221,7 @@ return (
   onClick={onOpenAddUpdate}
   className="absolute right-5 top-5 z-[140] rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 shadow-xl active:scale-95"
 >
-  Add Update
+  Add Post
 </button>
 
         {posts.map((post, index) => {
@@ -4062,7 +4238,7 @@ return (
   <button
     key={post.id}
     onClick={() => choosePost(index)}
-    className={`absolute left-1/2 top-[47%] grid h-32 w-32 place-items-center active:scale-95 ${
+    className={`absolute left-1/2 top-[42%] grid h-28 w-28 place-items-center active:scale-95 ${
   isDraggingOrbit ? "transition-none" : "transition-all duration-500 ease-out"
 }`}
     style={{
@@ -4103,135 +4279,31 @@ return (
 
         <button
           onClick={() => moveDial("prev")}
-          className="absolute bottom-4 left-5 z-[120] grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-slate-950/35 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+          className="absolute bottom-7 left-5 z-[120] grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/45 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
         >
           ‹
         </button>
 
         <button
           onClick={() => moveDial("next")}
-          className="absolute bottom-4 right-5 z-[120] grid h-11 w-11 place-items-center rounded-full border border-white/10 bg-slate-950/35 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+          className="absolute bottom-7 right-5 z-[120] grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/45 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
         >
           ›
         </button>
       </div>
 
-      {selectedPost && (
-        <div className="mt-4 rounded-[2.5rem] border border-white/10 bg-white/10 p-4 shadow-xl shadow-black/20 backdrop-blur-2xl">
-          <div className="flex items-center gap-3">
-            {selectedPerson && <Avatar person={selectedPerson} />}
-            <div>
-              <h2 className="text-lg font-semibold">{selectedPost.personName}</h2>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-  <p className="text-xs text-white/45">
-    {selectedPost.time} · {selectedPost.mood}
-  </p>
-
-  <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/55">
-    {getPostExpirationLabel(selectedPost)}
-  </span>
-</div>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-[1.5rem] bg-white/8 px-4 py-3">
-  <p className="text-[10px] uppercase tracking-[0.25em] text-white/35">Prompt</p>
-  <p className="mt-1 text-sm leading-5 text-white/70">{selectedPost.prompt}</p>
-</div>
-
-{selectedPost.photoUrl && (
-  <div className={`mt-4 rounded-[2.5rem] bg-gradient-to-br ${selectedPost.gradient} p-2 shadow-xl shadow-black/25`}>
-    <div className="rounded-[2rem] border border-white/25 bg-white/15 p-2 backdrop-blur-md">
-      <img
-        src={selectedPost.photoUrl}
-        alt={`${selectedPost.personName} update`}
-        className="h-56 w-full rounded-[1.5rem] object-cover"
-      />
-    </div>
-  </div>
+{selectedPost && (
+  <SelectedPostCard
+    post={selectedPost}
+    person={selectedPerson || undefined}
+    customEmoji={customEmoji}
+    replyText={replyText}
+    onCustomEmojiChange={setCustomEmoji}
+    onReplyTextChange={setReplyText}
+    onReact={addCustomEmojiReaction}
+    onReply={addTextReply}
+  />
 )}
-
-{selectedPost.caption && (
-  <p className="mt-3 text-base leading-6 text-white/90">{selectedPost.caption}</p>
-)}
-
-<div className="mt-5 space-y-3 pb-24">
-  <div className="flex items-center gap-2 overflow-x-auto pb-1 [-webkit-overflow-scrolling:touch]">
-    {["❤️", "😂", "👀", "✨"].map((emoji) => (
-      <button
-        key={emoji}
-        onClick={() => addCustomEmojiReaction(emoji)}
-        className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-lg shadow-inner shadow-white/10 active:scale-95"
-      >
-        {emoji}
-      </button>
-    ))}
-
-    <input
-      value={customEmoji}
-      onChange={(event) => setCustomEmoji(event.target.value)}
-      placeholder="Any emoji"
-      className="min-w-[105px] flex-1 rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
-    />
-
-    <button
-      onClick={() => addCustomEmojiReaction()}
-      className="shrink-0 rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950 active:scale-95"
-    >
-      React
-    </button>
-  </div>
-
-  {(selectedPost.reactions || []).length > 0 && (
-    <div className="flex flex-wrap gap-2">
-      {(selectedPost.reactions || []).map((reaction, index) => (
-        <span
-          key={`${selectedPost.id}-reaction-${index}`}
-          className="rounded-full bg-white/8 px-3 py-1 text-sm text-white/70"
-        >
-          {reaction.emoji} {reaction.userName}
-        </span>
-      ))}
-    </div>
-  )}
-
-  <div className="flex gap-2">
-    <input
-      value={replyText}
-      onChange={(event) => setReplyText(event.target.value)}
-      placeholder="Reply with a message..."
-      className="min-w-0 flex-1 rounded-full border border-white/10 bg-white/8 px-4 py-3 text-sm text-white outline-none placeholder:text-white/35"
-    />
-
-    <button
-      onClick={addTextReply}
-      className="shrink-0 rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 active:scale-95"
-    >
-      Send
-    </button>
-  </div>
-
-  {(selectedPost.replies || []).length > 0 && (
-    <div className="space-y-2">
-      {(selectedPost.replies || []).map((reply) => (
-        <div
-          key={reply.id}
-          className="rounded-[1.25rem] bg-white/8 px-4 py-3 text-sm text-white/75"
-        >
-          <p className="text-xs font-semibold text-white/45">{reply.userName}</p>
-          <p className="mt-1">{reply.text}</p>
-        </div>
-      ))}
-    </div>
-  )}
-
-  <button className="rounded-full bg-white/8 px-4 py-2 text-xs text-white/45 active:scale-95">
-    Report post
-  </button>
-</div>
-        </div>
-      )}
-
       <div className="hidden">
         <button
           aria-label="Circular Orbit dial"
