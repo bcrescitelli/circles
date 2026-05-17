@@ -1629,37 +1629,58 @@ function reactToPost(postId: string, emoji: string) {
 }
 
 async function replyToPost(postId: string, text: string, imageFile?: File) {
-  if (!currentUser || (!text.trim() && !imageFile)) return;
+  if (!currentUser) {
+    throw new Error("You need to be signed in to reply.");
+  }
+
+  const cleanedText = text.trim();
+
+  if (!cleanedText && !imageFile) {
+    throw new Error("Reply needs text or an image.");
+  }
+
+  const targetCircle = circles.find((circle) =>
+    circle.posts.some((post) => post.id === postId)
+  );
+
+  if (!targetCircle) {
+    throw new Error("Could not find the Circle for this post.");
+  }
 
   let uploadedImageUrl: string | undefined;
 
   if (imageFile) {
-    uploadedImageUrl = await uploadReplyPhoto(selectedCircleId, postId, imageFile);
+    uploadedImageUrl = await uploadReplyPhoto(targetCircle.id, postId, imageFile);
   }
 
-  updateCircleLocallyAndInFirestore(selectedCircleId, (circle) => ({
-    ...circle,
-    posts: circle.posts.map((post) => {
-      if (post.id !== postId) return post;
+  const newReply: PostReply = {
+    id: `reply-${Date.now()}`,
+    text: cleanedText,
+    userId: currentUser.id,
+    userName: currentUser.name,
+    createdAt: "Just now",
+    imageUrl: uploadedImageUrl,
+  };
 
-      const existingReplies = post.replies || [];
+  const updatedCircle: Circle = {
+    ...targetCircle,
+    posts: targetCircle.posts.map((post) => {
+      if (post.id !== postId) return post;
 
       return {
         ...post,
-        replies: [
-          ...existingReplies,
-          {
-            id: `reply-${Date.now()}`,
-            text: text.trim(),
-            userId: currentUser.id,
-            userName: currentUser.name,
-            createdAt: "Just now",
-            imageUrl: uploadedImageUrl,
-          },
-        ],
+        replies: [...(post.replies || []), newReply],
       };
     }),
-  }));
+  };
+
+  setCircles((currentCircles) =>
+    currentCircles.map((circle) =>
+      circle.id === updatedCircle.id ? updatedCircle : circle
+    )
+  );
+
+  await saveCircleToFirestore(currentUser.id, updatedCircle);
 }
 
 function addLoopToCircle(loopItem: LoopItem) {
@@ -4043,6 +4064,7 @@ function ReplyComposerModal({
   const [imageFile, setImageFile] = useState<File | undefined>();
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [replyError, setReplyError] = useState("");
 
   const canSend = text.trim().length > 0 || Boolean(imageFile);
 
@@ -4055,19 +4077,25 @@ function ReplyComposerModal({
   }
 
   async function handleSubmit() {
-    if (!canSend || isSending) return;
+  if (!canSend || isSending) return;
 
-    setIsSending(true);
+  setIsSending(true);
+  setReplyError("");
 
-    try {
-      await onSubmit(text, imageFile);
-      setText("");
-      setImageFile(undefined);
-      setImagePreviewUrl("");
-    } finally {
-      setIsSending(false);
-    }
+  try {
+    await onSubmit(text, imageFile);
+    setText("");
+    setImageFile(undefined);
+    setImagePreviewUrl("");
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Could not send reply.";
+
+    setReplyError(message);
+  } finally {
+    setIsSending(false);
   }
+}
 
   return (
     <div className="fixed inset-0 z-[600] flex items-start bg-slate-950/75 px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(7rem+env(safe-area-inset-top))] backdrop-blur-2xl">
@@ -4158,6 +4186,12 @@ function ReplyComposerModal({
             </button>
           )}
         </div>
+
+        {replyError && (
+  <p className="mx-4 mb-3 rounded-[1rem] border border-red-300/20 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+    {replyError}
+  </p>
+)}
 
         <div className="shrink-0 border-t border-white/10 bg-slate-950/95 p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
           <div className="grid grid-cols-2 gap-2">
@@ -4394,26 +4428,45 @@ const [isHorizontalOrbitDrag, setIsHorizontalOrbitDrag] = useState(false);
 const [customEmoji, setCustomEmoji] = useState("");
 const [replyText, setReplyText] = useState("");
 
-const [readPostIds, setReadPostIds] = useState<Set<string>>(
-  () => new Set(selectedPost ? [selectedPost.id] : [])
-);
+const readPostStorageKey = `circles-read-posts:${currentUserId}:${circle.id}`;
+const [readPostIds, setReadPostIds] = useState<Set<string>>(new Set());
 
 useEffect(() => {
-  if (!selectedPost) return;
+  if (typeof window === "undefined") return;
+
+  try {
+    const storedValue = window.localStorage.getItem(readPostStorageKey);
+    const storedIds = storedValue ? JSON.parse(storedValue) : [];
+
+    setReadPostIds(new Set(Array.isArray(storedIds) ? storedIds : []));
+  } catch {
+    setReadPostIds(new Set());
+  }
+}, [readPostStorageKey]);
+
+useEffect(() => {
+  if (!selectedPost || typeof window === "undefined") return;
 
   const readTimer = window.setTimeout(() => {
     setReadPostIds((currentIds) => {
       const nextIds = new Set(currentIds);
       nextIds.add(selectedPost.id);
+
+      window.localStorage.setItem(
+        readPostStorageKey,
+        JSON.stringify(Array.from(nextIds))
+      );
+
       return nextIds;
     });
   }, 500);
 
   return () => window.clearTimeout(readTimer);
-}, [selectedPost?.id]);
+}, [selectedPost?.id, readPostStorageKey]);
 
 function isPostUnread(post: Post) {
-  return post.id !== selectedPost?.id && !readPostIds.has(post.id);
+  if (post.personId === currentUserId) return false;
+  return !readPostIds.has(post.id);
 }
 
 function getCarouselDockItems() {
