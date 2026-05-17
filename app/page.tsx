@@ -4205,10 +4205,11 @@ function SelectedPostCard({
       {post.photoUrl && (
         <div className="mt-4 overflow-hidden rounded-[1.75rem] border border-white/10 bg-slate-950/30">
           <img
-            src={post.photoUrl}
-            alt={`${post.personName} post`}
-            className="max-h-[260px] w-full object-cover"
-          />
+  src={post.photoUrl}
+  alt={`${post.personName} post`}
+  draggable={false}
+  className="max-h-[260px] w-full select-none object-cover"
+/>
         </div>
       )}
 
@@ -4431,6 +4432,137 @@ function handleOrbitSwipeStart(startX: number, startY: number) {
   setIsHorizontalOrbitDrag(false);
 }
 
+function renderPostScrubber() {
+  return (
+    <div
+      className="rounded-[2rem] border border-white/10 bg-white/[0.06] p-3 shadow-xl shadow-black/20 backdrop-blur-2xl"
+      onPointerDown={(event) => {
+        handleOrbitSwipeStart(event.clientX, event.clientY);
+      }}
+      onPointerMove={(event) => {
+        handleOrbitSwipeMove(event.clientX, event.clientY);
+      }}
+      onPointerUp={(event) => {
+        handleOrbitSwipeEnd(event.clientX);
+      }}
+      onPointerCancel={() => {
+        setTouchStartX(null);
+        setTouchStartY(null);
+        setDragOffsetX(0);
+        setIsDraggingOrbit(false);
+        setIsHorizontalOrbitDrag(false);
+      }}
+    >
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          onClick={() => moveDial("prev")}
+          className="mt-3 grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+        >
+          ‹
+        </button>
+
+        <div className="flex min-w-0 flex-1 items-start justify-center gap-2 overflow-hidden">
+          {getCarouselDockItems().map(({ post, index }) => {
+            const isActive = index === selectedPostIndex;
+            const unread = isPostUnread(post);
+            const myBadges = getMyReactionBadges(post);
+            const firstName = post.personName.split(" ")[0];
+
+            return (
+              <button
+                key={`${post.id}-${index}`}
+                type="button"
+                onClick={() => choosePost(index)}
+                className="relative flex h-[88px] w-14 shrink-0 flex-col items-center justify-start pt-1 active:scale-95"
+              >
+                <div
+                  className={`relative grid shrink-0 place-items-center rounded-full transition-all duration-300 ${
+                    isActive ? "h-14 w-14" : "mt-1 h-11 w-11"
+                  } ${
+                    unread
+                      ? `bg-gradient-to-br ${post.gradient} p-[3px] shadow-lg shadow-black/30`
+                      : "border border-white/10 bg-white/10 p-[2px]"
+                  }`}
+                >
+                  <div
+                    className={`relative h-full w-full overflow-hidden rounded-full border ${
+                      isActive
+                        ? "border-white/60"
+                        : unread
+                          ? "border-white/35"
+                          : "border-white/10"
+                    } bg-slate-950/50`}
+                  >
+                    {post.photoUrl ? (
+                      <img
+                        src={post.photoUrl}
+                        alt={`${post.personName} post`}
+                        className="h-full w-full rounded-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className={`grid h-full w-full place-items-center bg-gradient-to-br ${post.personColor} text-xs font-black text-slate-950`}
+                      >
+                        {post.personInitials}
+                      </div>
+                    )}
+                  </div>
+
+                  {unread && (
+                    <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border border-slate-950 bg-white" />
+                  )}
+
+                  {myBadges.length > 0 && (
+                    <div className="absolute -bottom-1 -right-1 z-20 flex -space-x-1">
+                      {myBadges.slice(0, 2).map((emoji, badgeIndex) => (
+                        <span
+                          key={`${post.id}-${emoji}-${badgeIndex}`}
+                          className="grid h-5 w-5 place-items-center rounded-full border border-slate-950/50 bg-white text-[10px] shadow-lg shadow-black/30"
+                        >
+                          {emoji}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <span
+                  className={`mt-1 max-w-[58px] truncate rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    isActive
+                      ? "bg-white text-slate-950"
+                      : "bg-white/8 text-white/45"
+                  }`}
+                >
+                  {firstName}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => moveDial("next")}
+          className="mt-3 grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+        >
+          ›
+        </button>
+      </div>
+
+      <div className="mt-1 flex items-center justify-center gap-2">
+        <span className="rounded-full bg-white/8 px-3 py-1 text-[11px] font-semibold text-white/45">
+          {selectedPostIndex + 1}/{posts.length}
+        </span>
+
+        <span className="text-[11px] text-white/30">
+          Swipe or tap to browse
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function handleOrbitSwipeMove(
   currentX: number,
   currentY: number,
@@ -4625,159 +4757,60 @@ if (orbitMode === "loop") {
   }
 
 return (
-  <div className="space-y-4">
+  <div className="space-y-3">
     <div className="space-y-2">
       {modeSwitcher}
     </div>
 
-  <div className="relative overflow-hidden rounded-[2.75rem] border border-white/10 bg-slate-900/50 p-3 shadow-2xl shadow-black/30 backdrop-blur-2xl">
-  {selectedPost && (
-    <>
-      <div
-        className={`pointer-events-none absolute left-1/2 top-[42%] h-[30rem] w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br ${selectedPost.gradient} opacity-20 blur-3xl transition-all duration-700`}
-      />
-      <div
-        className={`pointer-events-none absolute left-1/2 top-[78%] h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br ${selectedPost.personColor} opacity-16 blur-3xl transition-all duration-700`}
-      />
-    </>
-  )}
+    {renderPostScrubber()}
 
-  <div className="pointer-events-none absolute inset-0 rounded-[2.75rem] bg-gradient-to-b from-slate-950/75 via-slate-950/35 to-slate-950/80" />
+    <div className="relative overflow-hidden rounded-[2.75rem] border border-white/10 bg-slate-900/50 p-3 shadow-2xl shadow-black/30 backdrop-blur-2xl">
+      {selectedPost && (
+        <>
+          <div
+            className={`pointer-events-none absolute left-1/2 top-[42%] h-[30rem] w-[30rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br ${selectedPost.gradient} opacity-20 blur-3xl transition-all duration-700`}
+          />
+          <div
+            className={`pointer-events-none absolute left-1/2 top-[78%] h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br ${selectedPost.personColor} opacity-16 blur-3xl transition-all duration-700`}
+          />
+        </>
+      )}
 
-  <div className="relative z-10">
-    {selectedPost && (
-      <SelectedPostCard
-        post={selectedPost}
-        person={selectedPerson}
-        currentUserId={currentUserId}
-        onReact={addCustomEmojiReaction}
-        onOpenReply={() => setIsReplyComposerOpen(true)}
-        onOpenReplies={() => setIsRepliesOpen(true)}
-      />
-    )}
+      <div className="pointer-events-none absolute inset-0 rounded-[2.75rem] bg-gradient-to-b from-slate-950/75 via-slate-950/35 to-slate-950/80" />
 
-    <div
-      className="mt-3 rounded-[2rem] border border-white/10 bg-slate-950/25 p-3"
-      onPointerDown={(event) => {
-        handleOrbitSwipeStart(event.clientX, event.clientY);
-      }}
-      onPointerMove={(event) => {
-        handleOrbitSwipeMove(event.clientX, event.clientY);
-      }}
-      onPointerUp={(event) => {
-        handleOrbitSwipeEnd(event.clientX);
-      }}
-      onPointerCancel={() => {
-        setTouchStartX(null);
-        setTouchStartY(null);
-        setDragOffsetX(0);
-        setIsDraggingOrbit(false);
-        setIsHorizontalOrbitDrag(false);
-      }}
-    >
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => moveDial("prev")}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+      <div className="relative z-10">
+        <div
+          className="touch-pan-y"
+          onPointerDown={(event) => {
+            handleOrbitSwipeStart(event.clientX, event.clientY);
+          }}
+          onPointerMove={(event) => {
+            handleOrbitSwipeMove(event.clientX, event.clientY);
+          }}
+          onPointerUp={(event) => {
+            handleOrbitSwipeEnd(event.clientX);
+          }}
+          onPointerCancel={() => {
+            setTouchStartX(null);
+            setTouchStartY(null);
+            setDragOffsetX(0);
+            setIsDraggingOrbit(false);
+            setIsHorizontalOrbitDrag(false);
+          }}
         >
-          ‹
-        </button>
-
-        <div className="flex min-w-0 flex-1 items-center justify-center gap-2 overflow-hidden">
-          {getCarouselDockItems().map(({ post, index, offset }) => {
-            const isActive = index === selectedPostIndex;
-            const unread = isPostUnread(post);
-            const myBadges = getMyReactionBadges(post);
-            const hiddenOnSmallSet = posts.length > 5 && Math.abs(offset) > 2;
-
-            if (hiddenOnSmallSet) return null;
-
-            return (
-              <button
-                key={`${post.id}-${index}`}
-                type="button"
-                onClick={() => choosePost(index)}
-                className={`relative grid shrink-0 place-items-center rounded-full transition-all duration-300 active:scale-95 ${
-                  isActive ? "h-16 w-16" : "h-12 w-12"
-                } ${
-                  unread
-                    ? `bg-gradient-to-br ${post.gradient} p-[3px] shadow-lg shadow-black/30`
-                    : "border border-white/10 bg-white/10 p-[2px]"
-                }`}
-              >
-                <div
-                  className={`relative h-full w-full overflow-hidden rounded-full border ${
-                    isActive
-                      ? "border-white/50"
-                      : unread
-                        ? "border-white/35"
-                        : "border-white/10"
-                  } bg-slate-950/50`}
-                >
-                  {post.photoUrl ? (
-                    <img
-                      src={post.photoUrl}
-                      alt={`${post.personName} post`}
-                      className="h-full w-full object-cover"
-                    />
-                  ) : (
-                    <div
-                      className={`grid h-full w-full place-items-center bg-gradient-to-br ${post.personColor} text-xs font-black text-slate-950`}
-                    >
-                      {post.personInitials}
-                    </div>
-                  )}
-                </div>
-
-                {unread && (
-                  <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border border-slate-950 bg-white" />
-                )}
-
-                {myBadges.length > 0 && (
-                  <div className="absolute -right-1 -bottom-1 z-20 flex -space-x-1">
-                    {myBadges.slice(0, 2).map((emoji, badgeIndex) => (
-                      <span
-                        key={`${post.id}-${emoji}-${badgeIndex}`}
-                        className="grid h-5 w-5 place-items-center rounded-full border border-slate-950/50 bg-white text-[10px] shadow-lg shadow-black/30"
-                      >
-                        {emoji}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {isActive && (
-                  <span className="absolute -bottom-5 max-w-[72px] truncate rounded-full bg-white px-3 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-black/30">
-                    {post.personName.split(" ")[0]}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+          {selectedPost && (
+            <SelectedPostCard
+              post={selectedPost}
+              person={selectedPerson}
+              currentUserId={currentUserId}
+              onReact={addCustomEmojiReaction}
+              onOpenReply={() => setIsReplyComposerOpen(true)}
+              onOpenReplies={() => setIsRepliesOpen(true)}
+            />
+          )}
         </div>
-
-        <button
-          type="button"
-          onClick={() => moveDial("next")}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
-        >
-          ›
-        </button>
-      </div>
-
-      <div className="mt-7 flex items-center justify-center gap-2">
-        <span className="rounded-full bg-white/8 px-3 py-1 text-[11px] font-semibold text-white/45">
-          {selectedPostIndex + 1}/{posts.length}
-        </span>
-
-        <span className="text-[11px] text-white/30">
-          Swipe or tap to browse
-        </span>
       </div>
     </div>
-  </div>
-</div>
 
     {selectedPost && isReplyComposerOpen && (
       <ReplyComposerModal
