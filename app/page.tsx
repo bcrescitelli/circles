@@ -3889,7 +3889,6 @@ function HomeView({
     </div>
   );
 }
-
 function RepliesModal({
   post,
   person,
@@ -3904,57 +3903,65 @@ function RepliesModal({
   const replies = post.replies || [];
 
   return (
-    <div className="fixed inset-0 z-[275] bg-slate-950/80 px-4 py-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-2xl">
-      <div className="mx-auto flex h-[calc(100%-1.5rem)] max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
+    <div className="fixed inset-0 z-[275] flex items-end bg-slate-950/75 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(4rem+env(safe-area-inset-top))] backdrop-blur-2xl">
+      <div className="mx-auto flex max-h-[82dvh] w-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
         <div className="shrink-0 border-b border-white/10 p-4">
+          <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20" />
+
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-white/45">Replies</p>
-              <h2 className="mt-1 text-3xl font-semibold tracking-tight">
+              <h2 className="mt-1 truncate text-2xl font-semibold tracking-tight">
                 {post.personName}'s post
               </h2>
             </div>
 
             <button
               onClick={onClose}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-xl text-white/70 active:scale-95"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10 text-xl text-white/70 active:scale-95"
             >
               ×
             </button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="rounded-[1.75rem] border border-white/10 bg-white/8 p-4">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 [-webkit-overflow-scrolling:touch]">
+          <div className="rounded-[1.5rem] border border-white/10 bg-white/8 p-3">
             <div className="flex items-center gap-3">
               {person ? (
                 <Avatar person={person} size="sm" />
               ) : (
-                <div className={`grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-xs font-black text-slate-950`}>
+                <div
+                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-xs font-black text-slate-950`}
+                >
                   {post.personInitials}
                 </div>
               )}
 
-              <div>
-                <p className="text-sm font-semibold">{post.personName}</p>
-                <p className="text-xs text-white/40">{post.time}</p>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold">{post.personName}</p>
+                <p className="truncate text-xs text-white/40">
+                  {post.time} · {getPostExpirationLabel(post)}
+                </p>
               </div>
             </div>
 
-            <p className="mt-4 text-sm leading-6 text-white/70">
-              {post.caption || "No caption."}
-            </p>
+            {post.caption && (
+              <p className="mt-3 line-clamp-3 text-sm leading-5 text-white/70">
+                {post.caption}
+              </p>
+            )}
 
             {post.photoUrl && (
               <img
                 src={post.photoUrl}
                 alt={`${post.personName} post`}
-                className="mt-4 max-h-72 w-full rounded-[1.5rem] object-cover"
+                className="mt-3 h-28 w-full rounded-[1.25rem] object-cover"
               />
             )}
           </div>
 
-          <div className="mt-4 space-y-3">
+          <div className="mt-4 space-y-3 pb-4">
             {replies.length > 0 ? (
               replies.map((reply) => (
                 <div
@@ -3962,12 +3969,16 @@ function RepliesModal({
                   className="rounded-[1.5rem] border border-white/10 bg-white/8 p-4"
                 >
                   <div className="flex items-center justify-between gap-3">
-                    <p className="text-sm font-semibold">{reply.userName}</p>
-                    <p className="text-xs text-white/35">{reply.createdAt}</p>
+                    <p className="truncate text-sm font-semibold">
+                      {reply.userName}
+                    </p>
+                    <p className="shrink-0 text-xs text-white/35">
+                      {reply.createdAt}
+                    </p>
                   </div>
 
                   {reply.text && (
-                    <p className="mt-2 text-sm leading-6 text-white/70">
+                    <p className="mt-2 text-sm leading-6 text-white/75">
                       {reply.text}
                     </p>
                   )}
@@ -3976,7 +3987,7 @@ function RepliesModal({
                     <img
                       src={reply.imageUrl}
                       alt={`${reply.userName} reply`}
-                      className="mt-3 max-h-80 w-full rounded-[1.25rem] object-cover"
+                      className="mt-3 max-h-64 w-full rounded-[1.25rem] object-cover"
                     />
                   )}
                 </div>
@@ -3994,13 +4005,22 @@ function RepliesModal({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-white/10 p-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
-          <button
-            onClick={onOpenReply}
-            className="w-full rounded-full bg-white px-5 py-4 font-semibold text-slate-950 active:scale-[0.98]"
-          >
-            Add Reply
-          </button>
+        <div className="shrink-0 border-t border-white/10 bg-slate-950/95 p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={onClose}
+              className="rounded-full bg-white/10 px-5 py-4 font-semibold text-white/65 active:scale-[0.98]"
+            >
+              Back
+            </button>
+
+            <button
+              onClick={onOpenReply}
+              className="rounded-full bg-white px-5 py-4 font-semibold text-slate-950 active:scale-[0.98]"
+            >
+              Add Reply
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -4047,44 +4067,57 @@ function ReplyComposerModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[280] bg-slate-950/80 px-4 py-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-2xl">
-      <div className="mx-auto flex h-[calc(100%-1.5rem)] max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
+    <div className="fixed inset-0 z-[280] flex items-end bg-slate-950/75 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(4rem+env(safe-area-inset-top))] backdrop-blur-2xl">
+      <div className="mx-auto flex max-h-[84dvh] w-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
         <div className="shrink-0 border-b border-white/10 p-4">
+          <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20" />
+
           <div className="flex items-start justify-between gap-4">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-white/45">Replying to {post.personName}</p>
-              <h2 className="mt-1 text-3xl font-semibold tracking-tight">
+              <h2 className="mt-1 text-2xl font-semibold tracking-tight">
                 Add a reply.
               </h2>
             </div>
 
             <button
               onClick={onClose}
-              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-xl text-white/70 active:scale-95"
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10 text-xl text-white/70 active:scale-95"
             >
               ×
             </button>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <div className="rounded-[1.75rem] bg-white/8 p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-white/35">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 [-webkit-overflow-scrolling:touch]">
+          <div className="rounded-[1.5rem] bg-white/8 p-3">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-white/35">
               Original post
             </p>
-            <p className="mt-2 line-clamp-3 text-sm leading-6 text-white/65">
-              {post.caption || "No caption."}
-            </p>
+
+            <div className="mt-2 flex items-center gap-3">
+              {post.photoUrl && (
+                <img
+                  src={post.photoUrl}
+                  alt={`${post.personName} post`}
+                  className="h-16 w-16 shrink-0 rounded-[1rem] object-cover"
+                />
+              )}
+
+              <p className="line-clamp-3 text-sm leading-5 text-white/65">
+                {post.caption || "No caption."}
+              </p>
+            </div>
           </div>
 
           <textarea
             value={text}
             onChange={(event) => setText(event.target.value)}
             placeholder="Write a reply"
-            className="mt-4 min-h-[150px] w-full resize-none rounded-[1.75rem] border border-white/10 bg-white/10 px-4 py-4 text-base leading-6 text-white outline-none placeholder:text-white/35 focus:border-white/30"
+            className="mt-4 min-h-[120px] w-full resize-none rounded-[1.5rem] border border-white/10 bg-white/10 px-4 py-4 text-base leading-6 text-white outline-none placeholder:text-white/35 focus:border-white/30"
           />
 
-          <label className="mt-4 block cursor-pointer rounded-[1.75rem] border border-dashed border-white/15 bg-white/8 p-4 text-center active:scale-[0.99]">
+          <label className="mt-4 block cursor-pointer rounded-[1.5rem] border border-dashed border-white/15 bg-white/8 p-3 text-center active:scale-[0.99]">
             <input
               type="file"
               accept="image/*"
@@ -4096,15 +4129,15 @@ function ReplyComposerModal({
               <img
                 src={imagePreviewUrl}
                 alt="Reply preview"
-                className="h-52 w-full rounded-[1.4rem] object-cover"
+                className="max-h-44 w-full rounded-[1.25rem] object-cover"
               />
             ) : (
-              <div className="py-8">
+              <div className="py-5">
                 <p className="text-sm font-semibold text-white/70">
                   Add image reply
                 </p>
                 <p className="mt-1 text-xs text-white/35">
-                  Optional, but useful for photos, screenshots, or context.
+                  Optional photo or screenshot.
                 </p>
               </div>
             )}
@@ -4123,29 +4156,29 @@ function ReplyComposerModal({
           )}
         </div>
 
-  <div className="shrink-0 border-t border-white/10 p-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
-  <div className="grid grid-cols-2 gap-2">
-    <button
-      onClick={onClose}
-      type="button"
-      className="rounded-full bg-white/10 px-5 py-4 font-semibold text-white/65 active:scale-[0.98]"
-    >
-      Back to Circle
-    </button>
+        <div className="shrink-0 border-t border-white/10 bg-slate-950/95 p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={onClose}
+              type="button"
+              className="rounded-full bg-white/10 px-5 py-4 font-semibold text-white/65 active:scale-[0.98]"
+            >
+              Back
+            </button>
 
-    <button
-      onClick={handleSubmit}
-      disabled={!canSend || isSending}
-      className={`rounded-full px-5 py-4 font-semibold active:scale-[0.98] ${
-        canSend && !isSending
-          ? "bg-white text-slate-950"
-          : "bg-white/10 text-white/30"
-      }`}
-    >
-      {isSending ? "Sending..." : "Send"}
-    </button>
-  </div>
-</div>
+            <button
+              onClick={handleSubmit}
+              disabled={!canSend || isSending}
+              className={`rounded-full px-5 py-4 font-semibold active:scale-[0.98] ${
+                canSend && !isSending
+                  ? "bg-white text-slate-950"
+                  : "bg-white/10 text-white/30"
+              }`}
+            >
+              {isSending ? "Sending..." : "Send"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );
