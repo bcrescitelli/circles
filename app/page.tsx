@@ -51,6 +51,7 @@ const storage = getStorage(firebaseApp);
 
 type CircleType = "Close Friends" | "Plans" | "Travel" | "Guest Orbit";
 type ContactStatus = "Friend" | "Pending" | "Guest" | "Suggested";
+type ActiveTab = "home" | "orbit" | "circle" | "people";
 
 type CurrentUser = {
   id: string;
@@ -443,6 +444,396 @@ function getComingSoonLoops(circles: Circle[]) {
     .slice(0, 3);
 }
 
+type OrbitNeed = {
+  id: string;
+  type: "Vote" | "Expiring" | "Plan" | "Invite" | "Catch Up";
+  title: string;
+  detail: string;
+  circleId?: string;
+};
+
+type OrbitHotCircle = {
+  circle: Circle;
+  score: number;
+  reason: string;
+};
+
+type OrbitMixItem = {
+  label: string;
+  value: number;
+};
+
+type OrbitBrief = {
+  modeName: string;
+  modeSubtitle: string;
+  reason: string;
+  nextMoveTitle: string;
+  nextMoveDetail: string;
+  nextMoveCircleId?: string;
+  stats: string[];
+  needs: OrbitNeed[];
+  hotCircles: OrbitHotCircle[];
+  mix: OrbitMixItem[];
+};
+
+function getLoopTimingLabelForOrbit(timing: LoopTiming) {
+  if (timing.type === "TBD") return "Timing TBD";
+
+  if (timing.type === "All Day") {
+    return timing.date ? `All day · ${timing.date}` : "All day";
+  }
+
+  if (timing.type === "Date Range") {
+    if (timing.date && timing.endDate) return `${timing.date} to ${timing.endDate}`;
+    if (timing.date) return `${timing.date} to TBD`;
+    return "Date range TBD";
+  }
+
+  if (timing.date && timing.time) return `${timing.date} · ${timing.time}`;
+  if (timing.date) return timing.date;
+
+  return "Date and time TBD";
+}
+
+function includesAnyKeyword(value: string, keywords: string[]) {
+  const normalizedValue = value.toLowerCase();
+  return keywords.some((keyword) => normalizedValue.includes(keyword));
+}
+
+function getCircleCategory(circle: Circle) {
+  const combinedText = `${circle.name} ${circle.type} ${circle.coverLabel || ""} ${circle.loop
+    .map((item) => `${item.title} ${item.type}`)
+    .join(" ")}`;
+
+  if (
+    includesAnyKeyword(combinedText, [
+      "trip",
+      "travel",
+      "bach",
+      "bachelorette",
+      "bachelor",
+      "weekend",
+      "vacation",
+      "flight",
+      "hotel",
+      "airbnb",
+    ])
+  ) {
+    return "Trips";
+  }
+
+  if (
+    includesAnyKeyword(combinedText, [
+      "party",
+      "birthday",
+      "drinks",
+      "dinner",
+      "brunch",
+      "event",
+      "wedding",
+      "shower",
+    ])
+  ) {
+    return "Events";
+  }
+
+  if (
+    includesAnyKeyword(combinedText, [
+      "book",
+      "club",
+      "workout",
+      "run",
+      "gym",
+      "class",
+      "hobby",
+    ])
+  ) {
+    return "Recurring";
+  }
+
+  if (circle.members.length <= 4) {
+    return "Close Friends";
+  }
+
+  return "Planning";
+}
+
+function getOpenPollsForUser(circles: Circle[], currentUser: CurrentUser) {
+  return circles.flatMap((circle) =>
+    circle.loop
+      .filter((loop) => !loop.archived && loop.poll)
+      .filter((loop) => {
+        const votes = loop.poll?.options.flatMap((option) => option.votes) || [];
+        return !votes.includes(currentUser.name);
+      })
+      .map((loop) => ({
+        circle,
+        loop,
+      }))
+  );
+}
+
+function getExpiringPosts(circles: Circle[]) {
+  const sixHoursFromNow = Date.now() + 6 * 60 * 60 * 1000;
+
+  return circles.flatMap((circle) =>
+    getActivePosts(circle)
+      .filter((post) => post.expiresAtMs && post.expiresAtMs <= sixHoursFromNow)
+      .map((post) => ({
+        circle,
+        post,
+      }))
+  );
+}
+
+function getUpcomingLoopsForOrbit(circles: Circle[]) {
+  return circles.flatMap((circle) =>
+    circle.loop
+      .filter(isLoopComingSoon)
+      .map((loop) => ({
+        circle,
+        loop,
+      }))
+  );
+}
+
+function getStuckLoops(circles: Circle[]) {
+  return circles.flatMap((circle) =>
+    circle.loop
+      .filter((loop) => !loop.archived)
+      .filter((loop) => {
+        const hasMaybeResponses = loop.participants.maybe.length >= 2;
+        const hasNoDate = !loop.timing.date;
+        const hasOpenPoll = Boolean(loop.poll);
+
+        return hasMaybeResponses || hasNoDate || hasOpenPoll;
+      })
+      .map((loop) => ({
+        circle,
+        loop,
+      }))
+  );
+}
+
+function getHotCircles(circles: Circle[]): OrbitHotCircle[] {
+  return circles
+    .map((circle) => {
+      const activePosts = getActivePosts(circle);
+      const replyCount = activePosts.reduce(
+        (total, post) => total + (post.replies?.length || 0),
+        0
+      );
+      const reactionCount = activePosts.reduce(
+        (total, post) => total + (post.reactions?.length || 0),
+        0
+      );
+      const activeLoops = circle.loop.filter((loop) => !loop.archived);
+      const upcomingLoops = activeLoops.filter(isLoopComingSoon);
+
+      const score =
+        activePosts.length * 3 +
+        replyCount * 2 +
+        reactionCount +
+        activeLoops.length * 3 +
+        upcomingLoops.length * 4;
+
+      const reasonParts = [];
+
+      if (activePosts.length) {
+        reasonParts.push(`${activePosts.length} active ${activePosts.length === 1 ? "post" : "posts"}`);
+      }
+
+      if (replyCount) {
+        reasonParts.push(`${replyCount} ${replyCount === 1 ? "reply" : "replies"}`);
+      }
+
+      if (activeLoops.length) {
+        reasonParts.push(`${activeLoops.length} active ${activeLoops.length === 1 ? "Loop" : "Loops"}`);
+      }
+
+      if (upcomingLoops.length) {
+        reasonParts.push(`${upcomingLoops.length} this week`);
+      }
+
+      return {
+        circle,
+        score,
+        reason: reasonParts.length ? reasonParts.join(" · ") : "Quiet right now",
+      };
+    })
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3);
+}
+
+function getOrbitMix(circles: Circle[]) {
+  const totals = new Map<string, number>();
+
+  circles.forEach((circle) => {
+    const category = getCircleCategory(circle);
+    const activity =
+      getActivePosts(circle).length * 2 +
+      circle.loop.filter((loop) => !loop.archived).length * 3 +
+      1;
+
+    totals.set(category, (totals.get(category) || 0) + activity);
+  });
+
+  const totalScore = Array.from(totals.values()).reduce(
+    (sum, value) => sum + value,
+    0
+  );
+
+  if (totalScore === 0) {
+    return [{ label: "Quiet", value: 100 }];
+  }
+
+  return Array.from(totals.entries())
+    .map(([label, score]) => ({
+      label,
+      value: Math.round((score / totalScore) * 100),
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 4);
+}
+
+function calculateOrbitBrief(
+  circles: Circle[],
+  currentUser: CurrentUser,
+  incomingRequests: FriendRequest[]
+): OrbitBrief {
+  const activePosts = circles.flatMap((circle) => getActivePosts(circle));
+  const activeLoops = circles.flatMap((circle) =>
+    circle.loop.filter((loop) => !loop.archived)
+  );
+  const upcomingLoops = getUpcomingLoopsForOrbit(circles);
+  const openPolls = getOpenPollsForUser(circles, currentUser);
+  const expiringPosts = getExpiringPosts(circles);
+  const stuckLoops = getStuckLoops(circles);
+  const hotCircles = getHotCircles(circles);
+  const mix = getOrbitMix(circles);
+
+  const travelScore = circles.reduce((score, circle) => {
+    const category = getCircleCategory(circle);
+    const activeScore =
+      getActivePosts(circle).length +
+      circle.loop.filter((loop) => !loop.archived).length * 2;
+
+    return category === "Trips" ? score + activeScore + 2 : score;
+  }, 0);
+
+  const eventScore = circles.reduce((score, circle) => {
+    const category = getCircleCategory(circle);
+    const activeScore =
+      getActivePosts(circle).length +
+      circle.loop.filter((loop) => !loop.archived).length * 2;
+
+    return category === "Events" ? score + activeScore + 2 : score;
+  }, 0);
+
+  const planningScore = activeLoops.length * 3 + openPolls.length * 4 + stuckLoops.length * 3;
+  const catchUpScore = expiringPosts.length * 4 + activePosts.length;
+  const socialScore =
+    activePosts.length * 2 +
+    activePosts.reduce((total, post) => total + (post.replies?.length || 0), 0) * 2 +
+    activePosts.reduce((total, post) => total + (post.reactions?.length || 0), 0);
+
+  const topCircle = hotCircles[0];
+
+  let modeName = "Quiet Orbit";
+  let modeSubtitle = "You are mostly caught up.";
+  let reason = "No major plans, posts, or decisions need attention right now.";
+
+  if (travelScore >= 5 && travelScore >= planningScore && travelScore >= eventScore) {
+    modeName = "Travel Bug";
+    modeSubtitle = "Your trip Circles are driving the action.";
+    reason = "Travel plans, trip Loops, or weekend activity are taking up the most space in your Orbit.";
+  } else if (planningScore >= 10) {
+    modeName = "The Planner";
+    modeSubtitle = "A few Circles need decisions.";
+    reason = "You have active Loops, open polls, or plans that still need details.";
+  } else if (openPolls.length >= 2 || stuckLoops.length >= 2) {
+    modeName = "Decision Point";
+    modeSubtitle = "Some plans are waiting on choices.";
+    reason = "Polls, Maybe responses, or missing dates are slowing a few Loops down.";
+  } else if (eventScore >= 5 || upcomingLoops.length >= 2) {
+    modeName = "Booked & Busy";
+    modeSubtitle = "Your week has plans coming up.";
+    reason = "Upcoming Loops and event activity are giving your Orbit momentum.";
+  } else if (socialScore >= 12 && hotCircles.length >= 3) {
+    modeName = "Social Butterfly";
+    modeSubtitle = "A few Circles are buzzing at once.";
+    reason = "Posts, replies, and reactions are spread across multiple Circles.";
+  } else if (catchUpScore >= 8) {
+    modeName = "Catch Up Crew";
+    modeSubtitle = "A few updates are worth checking soon.";
+    reason = "Some posts are active or close to expiring.";
+  } else if (topCircle && topCircle.score >= 8) {
+    modeName = "Inner Circle";
+    modeSubtitle = "Most of your energy is in one close space.";
+    reason = `${topCircle.circle.name} is carrying most of your Orbit right now.`;
+  }
+
+  const needs: OrbitNeed[] = [
+    ...openPolls.slice(0, 2).map(({ circle, loop }) => ({
+      id: `poll-${circle.id}-${loop.id}`,
+      type: "Vote" as const,
+      title: "Vote needed",
+      detail: `${loop.title} in ${circle.name}`,
+      circleId: circle.id,
+    })),
+    ...expiringPosts.slice(0, 2).map(({ circle, post }) => ({
+      id: `expiring-${circle.id}-${post.id}`,
+      type: "Expiring" as const,
+      title: "Post expiring soon",
+      detail: `${post.personName}'s post in ${circle.name}`,
+      circleId: circle.id,
+    })),
+    ...stuckLoops.slice(0, 2).map(({ circle, loop }) => ({
+      id: `stuck-${circle.id}-${loop.id}`,
+      type: "Plan" as const,
+      title: "Plan needs shape",
+      detail: `${loop.title} in ${circle.name}`,
+      circleId: circle.id,
+    })),
+    ...incomingRequests.slice(0, 1).map((request) => ({
+      id: `request-${request.id}`,
+      type: "Invite" as const,
+      title: "Friend request",
+      detail: `${request.fromName} wants to connect`,
+    })),
+  ].slice(0, 5);
+
+  const firstNeed = needs[0];
+
+  const nextMoveTitle =
+    firstNeed?.title ||
+    (topCircle ? `Check ${topCircle.circle.name}` : "Start a quick post");
+
+  const nextMoveDetail =
+    firstNeed?.detail ||
+    (topCircle
+      ? topCircle.reason
+      : "Nothing urgent needs you. Start a post or create a Loop if you want to get people moving.");
+
+  return {
+    modeName,
+    modeSubtitle,
+    reason,
+    nextMoveTitle,
+    nextMoveDetail,
+    nextMoveCircleId: firstNeed?.circleId || topCircle?.circle.id,
+    stats: [
+      `${activeLoops.length} active ${activeLoops.length === 1 ? "Loop" : "Loops"}`,
+      `${openPolls.length} open ${openPolls.length === 1 ? "poll" : "polls"}`,
+      `${upcomingLoops.length} this week`,
+    ],
+    needs,
+    hotCircles,
+    mix,
+  };
+}
+
 function Avatar({ person, size = "md" }: { person: Person; size?: "sm" | "md" | "lg" }) {
   const sizeClass =
     size === "sm"
@@ -528,7 +919,7 @@ export default function Home() {
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [authError, setAuthError] = useState("");
-  const [activeTab, setActiveTab] = useState<"home" | "orbit" | "people">("home");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [selectedCircleId, setSelectedCircleId] = useState("");
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
   const [isCreateCircleOpen, setIsCreateCircleOpen] = useState(false);
@@ -962,10 +1353,10 @@ useEffect(() => {
 }, [currentUser?.id]);
 
   function openCircle(circleId: string) {
-    setSelectedCircleId(circleId);
-    setSelectedPostIndex(0);
-    setActiveTab("orbit");
-  }
+  setSelectedCircleId(circleId);
+  setSelectedPostIndex(0);
+  setActiveTab("circle");
+}
 
 async function createCircle(newCircle: Circle) {
   if (!currentUser) return;
@@ -1611,25 +2002,35 @@ if (!currentUser) {
 />
           )}
 
-{activeTab === "orbit" && selectedCircle && (
-  <OrbitView
-  circle={selectedCircle}
-  selectedPostIndex={selectedPostIndex}
-  setSelectedPostIndex={setSelectedPostIndex}
-  onOpenAddUpdate={() => setIsAddUpdateOpen(true)}
-  onOpenCreateLoop={() => setIsCreateLoopOpen(true)}
-  onOpenCircleSettings={() => setIsCircleSettingsOpen(true)}
-  onArchiveLoop={archiveLoop}
-  onSetParticipation={setLoopParticipation}
-  onVotePoll={voteOnLoopPoll}
-  onToggleTask={toggleLoopTask}
-  onOpenGuestPass={openGuestPass}
-  onReactToPost={reactToPost}
-  onReplyToPost={replyToPost}
-/>
+{activeTab === "orbit" && (
+  <OrbitBriefView
+    circles={circles}
+    currentUser={currentUser}
+    incomingRequests={incomingRequests}
+    onOpenCircle={openCircle}
+    onOpenPeople={() => setActiveTab("people")}
+  />
 )}
 
-{activeTab === "orbit" && !selectedCircle && (
+{activeTab === "circle" && selectedCircle && (
+  <OrbitView
+    circle={selectedCircle}
+    selectedPostIndex={selectedPostIndex}
+    setSelectedPostIndex={setSelectedPostIndex}
+    onOpenAddUpdate={() => setIsAddUpdateOpen(true)}
+    onOpenCreateLoop={() => setIsCreateLoopOpen(true)}
+    onOpenCircleSettings={() => setIsCircleSettingsOpen(true)}
+    onArchiveLoop={archiveLoop}
+    onSetParticipation={setLoopParticipation}
+    onVotePoll={voteOnLoopPoll}
+    onToggleTask={toggleLoopTask}
+    onOpenGuestPass={openGuestPass}
+    onReactToPost={reactToPost}
+    onReplyToPost={replyToPost}
+  />
+)}
+
+{activeTab === "circle" && !selectedCircle && (
   <div className="rounded-[2.5rem] border border-white/10 bg-white/8 p-6 text-center shadow-xl shadow-black/20 backdrop-blur-2xl">
     <h2 className="text-2xl font-semibold">No Circle yet.</h2>
     <p className="mt-3 text-sm leading-6 text-white/55">
@@ -2413,26 +2814,32 @@ function Header({
   onOpenCircleSettings,
 }: {
   circle: Circle | null;
-  activeTab: string;
+  activeTab: ActiveTab;
   currentUser: CurrentUser;
   onOpenProfile: () => void;
   onOpenCircleSettings: () => void;
 }) {
-  const isOrbit = activeTab === "orbit" && circle;
+  const isCircleDetail = activeTab === "circle" && circle;
+  const isOrbitBrief = activeTab === "orbit";
 
   return (
     <header className="relative z-10 px-5 pt-[calc(1rem+env(safe-area-inset-top))]">
       <div className="flex items-center justify-between">
         <div className="min-w-0">
           <p className="text-sm text-white/45">
-            {isOrbit ? "Circle" : "Home"}
+            {isCircleDetail ? "Circle" : isOrbitBrief ? "Orbit" : "Home"}
           </p>
+
           <h1 className="truncate text-3xl font-semibold tracking-tight">
-            {isOrbit ? circle.name : `Welcome ${getFirstName(currentUser.name)}`}
+            {isCircleDetail
+              ? circle.name
+              : isOrbitBrief
+                ? "Your Orbit"
+                : `Welcome ${getFirstName(currentUser.name)}`}
           </h1>
         </div>
 
-        {isOrbit ? (
+        {isCircleDetail ? (
           <button onClick={onOpenCircleSettings} className="active:scale-95">
             <CircleVisual circle={circle} size="sm" />
           </button>
@@ -2454,6 +2861,222 @@ function Header({
         )}
       </div>
     </header>
+  );
+}
+
+function OrbitBriefView({
+  circles,
+  currentUser,
+  incomingRequests,
+  onOpenCircle,
+  onOpenPeople,
+}: {
+  circles: Circle[];
+  currentUser: CurrentUser;
+  incomingRequests: FriendRequest[];
+  onOpenCircle: (circleId: string) => void;
+  onOpenPeople: () => void;
+}) {
+  const orbitBrief = useMemo(
+    () => calculateOrbitBrief(circles, currentUser, incomingRequests),
+    [circles, currentUser, incomingRequests]
+  );
+
+  const modeGradient =
+    orbitBrief.modeName === "Travel Bug"
+      ? "from-orange-300 via-rose-500 to-fuchsia-700"
+      : orbitBrief.modeName === "The Planner"
+        ? "from-cyan-300 via-blue-500 to-indigo-800"
+        : orbitBrief.modeName === "Decision Point"
+          ? "from-yellow-200 via-orange-500 to-red-700"
+          : orbitBrief.modeName === "Booked & Busy"
+            ? "from-fuchsia-300 via-purple-500 to-indigo-800"
+            : orbitBrief.modeName === "Social Butterfly"
+              ? "from-lime-200 via-emerald-400 to-cyan-700"
+              : orbitBrief.modeName === "Catch Up Crew"
+                ? "from-amber-200 via-orange-400 to-rose-700"
+                : orbitBrief.modeName === "Inner Circle"
+                  ? "from-rose-200 via-purple-500 to-indigo-900"
+                  : "from-slate-200 via-slate-400 to-slate-800";
+
+  function handleNeedClick(need: OrbitNeed) {
+    if (need.circleId) {
+      onOpenCircle(need.circleId);
+      return;
+    }
+
+    if (need.type === "Invite") {
+      onOpenPeople();
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className={`relative overflow-hidden rounded-[2.75rem] border border-white/10 bg-gradient-to-br ${modeGradient} p-5 shadow-2xl shadow-black/30`}>
+        <div className="absolute inset-0 bg-slate-950/25" />
+        <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white/20 blur-2xl" />
+        <div className="absolute -bottom-14 left-6 h-32 w-32 rounded-full bg-white/10 blur-2xl" />
+
+        <div className="relative z-10">
+          <div className="flex items-center justify-between gap-3">
+            <p className="rounded-full bg-white/18 px-3 py-1 text-xs font-semibold text-white/75">
+              Orbit Brief
+            </p>
+
+            <p className="rounded-full bg-slate-950/25 px-3 py-1 text-xs font-semibold text-white/75">
+              Now
+            </p>
+          </div>
+
+          <h2 className="mt-7 text-4xl font-semibold leading-[0.95] tracking-tight">
+            {orbitBrief.modeName}
+          </h2>
+
+          <p className="mt-3 text-lg font-medium text-white/85">
+            {orbitBrief.modeSubtitle}
+          </p>
+
+          <p className="mt-3 text-sm leading-6 text-white/70">
+            {orbitBrief.reason}
+          </p>
+
+          <div className="mt-5 flex flex-wrap gap-2">
+            {orbitBrief.stats.map((stat) => (
+              <span
+                key={stat}
+                className="rounded-full bg-white/18 px-3 py-2 text-xs font-semibold text-white/80"
+              >
+                {stat}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-[2rem] border border-white/10 bg-white/8 p-4 shadow-xl shadow-black/20 backdrop-blur-2xl">
+        <p className="text-xs uppercase tracking-[0.22em] text-white/35">
+          Next move
+        </p>
+
+        <h3 className="mt-2 text-xl font-semibold">
+          {orbitBrief.nextMoveTitle}
+        </h3>
+
+        <p className="mt-2 text-sm leading-6 text-white/50">
+          {orbitBrief.nextMoveDetail}
+        </p>
+
+        {orbitBrief.nextMoveCircleId && (
+          <button
+            onClick={() => onOpenCircle(orbitBrief.nextMoveCircleId!)}
+            className="mt-4 w-full rounded-full bg-white px-5 py-4 text-sm font-semibold text-slate-950 active:scale-[0.98]"
+          >
+            Go there
+          </button>
+        )}
+      </div>
+
+      {orbitBrief.needs.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h3 className="text-lg font-semibold">Needs You</h3>
+            <span className="rounded-full bg-white/8 px-3 py-1 text-xs text-white/45">
+              {orbitBrief.needs.length}
+            </span>
+          </div>
+
+          <div className="space-y-2">
+            {orbitBrief.needs.map((need) => (
+              <button
+                key={need.id}
+                onClick={() => handleNeedClick(need)}
+                className="flex w-full items-center justify-between gap-3 rounded-[1.5rem] border border-white/10 bg-white/8 p-4 text-left active:scale-[0.98]"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold">{need.title}</p>
+                  <p className="mt-1 truncate text-xs text-white/45">
+                    {need.detail}
+                  </p>
+                </div>
+
+                <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs text-white/55">
+                  {need.type}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {orbitBrief.hotCircles.length > 0 && (
+        <div className="space-y-3">
+          <div className="px-1">
+            <h3 className="text-lg font-semibold">Hot Right Now</h3>
+          </div>
+
+          <div className="space-y-2">
+            {orbitBrief.hotCircles.map(({ circle, reason, score }) => (
+              <button
+                key={circle.id}
+                onClick={() => onOpenCircle(circle.id)}
+                className="flex w-full items-center gap-4 rounded-[1.75rem] border border-white/10 bg-white/8 p-4 text-left shadow-lg shadow-black/15 active:scale-[0.98]"
+              >
+                <div className={score >= 12 ? "scale-110" : score >= 6 ? "scale-105" : ""}>
+                  <CircleVisual circle={circle} size="sm" />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">
+                    {circle.name}
+                  </p>
+                  <p className="mt-1 truncate text-xs text-white/45">
+                    {reason}
+                  </p>
+                </div>
+
+                <span className="grid h-2.5 w-2.5 rounded-full bg-cyan-200 shadow-lg shadow-cyan-300/40" />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-[2rem] border border-white/10 bg-white/8 p-4 shadow-xl shadow-black/20 backdrop-blur-2xl">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold">Your Mix</h3>
+          <span className="rounded-full bg-white/8 px-3 py-1 text-xs text-white/45">
+            This week
+          </span>
+        </div>
+
+        <div className="mt-4 space-y-3">
+          {orbitBrief.mix.map((item) => (
+            <div key={item.label}>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-white/75">{item.label}</span>
+                <span className="text-white/45">{item.value}%</span>
+              </div>
+
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-white/8">
+                <div
+                  className="h-full rounded-full bg-white/70"
+                  style={{ width: `${item.value}%` }}
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {circles.length === 0 && (
+        <div className="rounded-[2rem] border border-white/10 bg-white/8 p-5 text-center">
+          <h3 className="text-xl font-semibold">Your Orbit is empty.</h3>
+          <p className="mt-2 text-sm leading-6 text-white/45">
+            Once you create Circles, posts, and Loops, this page will show what needs your attention.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -5697,38 +6320,42 @@ function BottomNav({
   setActiveTab,
   requestCount,
 }: {
-  activeTab: "home" | "orbit" | "people";
-  setActiveTab: (tab: "home" | "orbit" | "people") => void;
+  activeTab: ActiveTab;
+  setActiveTab: (tab: ActiveTab) => void;
   requestCount: number;
 }) {
-  const tabs: { id: "home" | "orbit" | "people"; label: string }[] = [
+  const tabs: { id: ActiveTab; label: string }[] = [
     { id: "home", label: "Home" },
     { id: "orbit", label: "Orbit" },
     { id: "people", label: "People" },
   ];
 
   return (
-    <nav className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 right-4 z-50 rounded-full border border-white/10 bg-white/12 p-2 shadow-2xl shadow-black/40 backdrop-blur-2xl">
-      <div className="grid grid-cols-3 gap-1">
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`relative rounded-full px-2 py-3 text-[12px] font-medium transition active:scale-95 ${
-              activeTab === tab.id
-                ? "bg-white text-slate-950 shadow-lg"
-                : "text-white/55"
-            }`}
-          >
-            {tab.label}
+    <nav className="absolute bottom-5 left-5 right-5 z-50 rounded-full border border-white/10 bg-white/12 p-2 shadow-2xl shadow-black/40 backdrop-blur-2xl">
+      <div className="grid grid-cols-3 gap-2">
+        {tabs.map((tab) => {
+          const isActive =
+            activeTab === tab.id ||
+            (tab.id === "orbit" && activeTab === "circle");
 
-            {tab.id === "people" && requestCount > 0 && (
-              <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-cyan-300 px-1 text-[10px] font-black text-slate-950">
-                {requestCount}
-              </span>
-            )}
-          </button>
-        ))}
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`relative rounded-full px-3 py-3 text-sm font-medium transition active:scale-95 ${
+                isActive ? "bg-white text-slate-950 shadow-lg" : "text-white/55"
+              }`}
+            >
+              {tab.label}
+
+              {tab.id === "people" && requestCount > 0 && (
+                <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-cyan-200 px-1 text-[10px] font-black text-slate-950">
+                  {requestCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
     </nav>
   );
