@@ -18,6 +18,13 @@ import {
 } from "firebase/firestore";
 
 import {
+  getStorage,
+  ref,
+  uploadBytes,
+  getDownloadURL,
+} from "firebase/storage";
+
+import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
@@ -40,6 +47,7 @@ const firebaseConfig = {
 const firebaseApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 const firebaseAuth = getAuth(firebaseApp);
 const db = getFirestore(firebaseApp);
+const storage = getStorage(firebaseApp);
 
 type CircleType = "Close Friends" | "Plans" | "Travel" | "Guest Orbit";
 type ContactStatus = "Friend" | "Pending" | "Guest" | "Suggested";
@@ -871,8 +879,28 @@ async function createCircle(newCircle: Circle) {
   await saveCircleToFirestore(currentUser.id, sharedCircle);
 }
 
-function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
+async function uploadPostPhoto(circleId: string, file: File) {
+  if (!currentUser) {
+    throw new Error("You need to be signed in to upload a photo.");
+  }
+
+  const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "-");
+  const filePath = `circles/${circleId}/posts/${currentUser.id}/${Date.now()}-${safeFileName}`;
+  const storageRef = ref(storage, filePath);
+
+  await uploadBytes(storageRef, file);
+
+  return getDownloadURL(storageRef);
+}
+
+async function addPostToCircle(caption: string, mood: string, photoFile?: File) {
   if (!currentUser) return;
+
+  let uploadedPhotoUrl: string | undefined;
+
+  if (photoFile) {
+    uploadedPhotoUrl = await uploadPostPhoto(selectedCircleId, photoFile);
+  }
 
   const newPost: Post = {
     id: `post-${Date.now()}`,
@@ -884,7 +912,7 @@ function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
     time: "Just now",
     mood,
     prompt: selectedCircle?.dailyPrompt || "What is your energy today?",
-    photoUrl,
+    photoUrl: uploadedPhotoUrl,
     gradient: getPostGradientForUser(currentUser.id),
     reactions: [],
     replies: [],
@@ -4891,11 +4919,13 @@ function AddUpdateModal({
 }: {
   circle: Circle;
   onClose: () => void;
-  onAddPost: (caption: string, mood: string, photoUrl?: string) => void;
+  onAddPost: (caption: string, mood: string, photoFile?: File) => void;
 }) {
   const [caption, setCaption] = useState("");
   const [mood, setMood] = useState("present");
-  const [photoUrl, setPhotoUrl] = useState<string | undefined>();
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | undefined>();
+const [photoFile, setPhotoFile] = useState<File | undefined>();
+const [isPosting, setIsPosting] = useState(false);
 
   const moods = [
     "present",
@@ -4908,20 +4938,28 @@ function AddUpdateModal({
     "vacation brain",
   ];
 
-  const canPost = Boolean(photoUrl) || caption.trim().length > 1;
+  const canPost = Boolean(photoFile) || caption.trim().length > 1;
 
-  function handlePhotoSelect(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
+function handlePhotoSelect(event: ChangeEvent<HTMLInputElement>) {
+  const file = event.target.files?.[0];
+  if (!file) return;
 
-    const previewUrl = URL.createObjectURL(file);
-    setPhotoUrl(previewUrl);
+  const previewUrl = URL.createObjectURL(file);
+  setPhotoFile(file);
+  setPhotoPreviewUrl(previewUrl);
+}
+
+async function handlePost() {
+  if (!canPost || isPosting) return;
+
+  setIsPosting(true);
+
+  try {
+    await onAddPost(caption.trim(), mood, photoFile);
+  } finally {
+    setIsPosting(false);
   }
-
-  function handlePost() {
-    if (!canPost) return;
-    onAddPost(caption.trim(), mood, photoUrl);
-  }
+}
 
   return (
     <div className="fixed inset-0 z-[220] overflow-hidden bg-slate-950/80 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-2xl">
@@ -4956,9 +4994,9 @@ function AddUpdateModal({
 
           <div className="mt-4">
             <label className="block cursor-pointer rounded-[2rem] border border-dashed border-white/20 bg-white/8 p-4 text-center active:scale-[0.99]">
-              {photoUrl ? (
+              {photoPreviewUrl ? (
                 <img
-                  src={photoUrl}
+                  src={photoPreviewUrl}
                   alt="Selected update"
                   className="h-64 w-full rounded-[1.5rem] object-cover"
                 />
@@ -4979,7 +5017,7 @@ function AddUpdateModal({
               )}
 
               <p className="mt-3 text-sm text-white/45">
-                {photoUrl ? "Tap to change photo" : "Choose from your phone"}
+                {photoPreviewUrl ? "Tap to change photo" : "Choose from your phone"}
               </p>
 
               <input
@@ -5027,12 +5065,12 @@ function AddUpdateModal({
         <div className="shrink-0 border-t border-white/10 bg-slate-950/90 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))] backdrop-blur-2xl">
           <button
             onClick={handlePost}
-            disabled={!canPost}
+            disabled={!canPost || isPosting}
             className={`w-full rounded-full px-5 py-4 font-semibold active:scale-[0.98] ${
               canPost ? "bg-white text-slate-950" : "bg-white/10 text-white/30"
             }`}
           >
-            Post Update
+            {isPosting ? "Posting..." : "Post Update"}
           </button>
         </div>
       </div>
