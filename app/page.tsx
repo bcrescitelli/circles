@@ -2091,7 +2091,7 @@ if (!currentUser) {
   />
 )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(11rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(14rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
           {activeTab === "home" && (
   <HomeView
     circles={circles}
@@ -4037,7 +4037,7 @@ function SelectedPostCard({
 }) {
   const reactions = post.reactions || [];
   const replies = post.replies || [];
-  const topReplies = replies.slice(0, 3);
+  const topReplies = replies.slice(0, 2);
   const hiddenReplyCount = Math.max(0, replies.length - topReplies.length);
   const imageReply = replies.find((reply) => reply.imageUrl);
 
@@ -4054,10 +4054,12 @@ function SelectedPostCard({
   }
 
   return (
-    <div className="rounded-[2.25rem] border border-white/10 bg-white/10 p-4 shadow-xl shadow-black/25 backdrop-blur-2xl">
-      <div className="grid grid-cols-[42%_1fr] gap-4">
+    <div className="rounded-[2.25rem] bg-white/[0.06] p-3 shadow-inner shadow-white/5">
+      <div className="grid grid-cols-[40%_1fr] gap-3">
         <div className="min-w-0">
-          <div className={`relative aspect-[0.92] overflow-hidden rounded-[55%_42%_48%_38%/40%_55%_42%_58%] border border-white/15 bg-gradient-to-br ${post.gradient} shadow-xl shadow-black/25`}>
+          <div
+            className={`relative aspect-[0.95] overflow-hidden rounded-[56%_42%_48%_38%/42%_56%_44%_58%] border border-cyan-200/50 bg-gradient-to-br ${post.gradient} shadow-xl shadow-black/25`}
+          >
             {post.photoUrl ? (
               <img
                 src={post.photoUrl}
@@ -4066,51 +4068,56 @@ function SelectedPostCard({
               />
             ) : (
               <div className="grid h-full w-full place-items-center">
-                <div className={`grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-xl font-black text-slate-950 shadow-xl shadow-black/25`}>
+                <div
+                  className={`grid h-16 w-16 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-lg font-black text-slate-950 shadow-xl shadow-black/25`}
+                >
                   {post.personInitials}
                 </div>
               </div>
             )}
           </div>
 
-          <div className="mt-3">
-            <div className="flex items-center gap-2">
-              {person ? (
-                <Avatar person={person} size="sm" />
-              ) : (
-                <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-xs font-black text-slate-950`}>
-                  {post.personInitials}
-                </div>
-              )}
-
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold">{post.personName}</p>
-                <p className="truncate text-[11px] text-white/40">
-                  {post.time} · {getPostExpirationLabel(post)}
-                </p>
+          <div className="mt-3 flex items-center gap-2">
+            {person ? (
+              <Avatar person={person} size="sm" />
+            ) : (
+              <div
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-xs font-black text-slate-950`}
+              >
+                {post.personInitials}
               </div>
-            </div>
+            )}
 
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {reactionOptions.map((emoji) => {
-                const count = getReactionCount(emoji);
-                const active = hasReacted(emoji);
-
-                return (
-                  <button
-                    key={emoji}
-                    onClick={() => onReact(emoji)}
-                    className={`rounded-full px-2.5 py-1.5 text-xs font-semibold active:scale-95 ${
-                      active
-                        ? "bg-white text-slate-950"
-                        : "bg-white/10 text-white/65"
-                    }`}
-                  >
-                    {emoji} {count}
-                  </button>
-                );
-              })}
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{post.personName}</p>
+              <p className="text-[11px] leading-4 text-white/40">
+                {post.time}
+              </p>
+              <p className="text-[11px] leading-4 text-white/40">
+                {getPostExpirationLabel(post)}
+              </p>
             </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-2 gap-1.5">
+            {reactionOptions.map((emoji) => {
+              const count = getReactionCount(emoji);
+              const active = hasReacted(emoji);
+
+              return (
+                <button
+                  key={emoji}
+                  onClick={() => onReact(emoji)}
+                  className={`h-9 rounded-full px-2 text-xs font-semibold active:scale-95 ${
+                    active
+                      ? "bg-white text-slate-950"
+                      : "bg-white/10 text-white/65"
+                  }`}
+                >
+                  {emoji} {count}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -4119,32 +4126,32 @@ function SelectedPostCard({
             Post
           </p>
 
-          <p className="mt-2 line-clamp-5 text-sm leading-5 text-white/85">
+          <p className="mt-2 line-clamp-4 text-sm leading-5 text-white/85">
             {post.caption || "No caption yet."}
           </p>
 
-          <div className="mt-4 space-y-2">
-            <div className="flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">
-                Replies
-              </p>
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/35">
+              Replies
+            </p>
 
-              {replies.length > 0 && (
-                <button
-                  onClick={onOpenReplies}
-                  className="text-xs font-semibold text-white/45 active:scale-95"
-                >
-                  View all
-                </button>
-              )}
-            </div>
+            {replies.length > 0 && (
+              <button
+                onClick={onOpenReplies}
+                className="rounded-full bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/45 active:scale-95"
+              >
+                View all
+              </button>
+            )}
+          </div>
 
+          <div className="mt-2 space-y-2">
             {topReplies.length > 0 ? (
               topReplies.map((reply) => (
                 <button
                   key={reply.id}
                   onClick={onOpenReplies}
-                  className="w-full rounded-[1rem] bg-white/8 px-3 py-2 text-left active:scale-[0.99]"
+                  className="w-full rounded-[1.2rem] bg-white/8 px-3 py-2 text-left active:scale-[0.99]"
                 >
                   <p className="truncate text-[11px] font-semibold text-white/55">
                     {reply.userName}
@@ -4160,13 +4167,13 @@ function SelectedPostCard({
                     <img
                       src={reply.imageUrl}
                       alt={`${reply.userName} reply`}
-                      className="mt-2 h-16 w-full rounded-[0.85rem] object-cover"
+                      className="mt-2 h-14 w-full rounded-[0.9rem] object-cover"
                     />
                   )}
                 </button>
               ))
             ) : (
-              <p className="rounded-[1rem] bg-white/8 px-3 py-3 text-xs leading-5 text-white/40">
+              <p className="rounded-[1.2rem] bg-white/8 px-3 py-3 text-xs leading-5 text-white/40">
                 No replies yet.
               </p>
             )}
@@ -4180,10 +4187,10 @@ function SelectedPostCard({
               </button>
             )}
 
-            {imageReply?.imageUrl && (
+            {imageReply?.imageUrl && topReplies.every((reply) => !reply.imageUrl) && (
               <button
                 onClick={onOpenReplies}
-                className="relative mt-2 h-20 w-full overflow-hidden rounded-[1.5rem] border border-white/10 active:scale-[0.99]"
+                className="relative h-16 w-full overflow-hidden rounded-[1.25rem] border border-white/10 active:scale-[0.99]"
               >
                 <img
                   src={imageReply.imageUrl}
@@ -4201,14 +4208,14 @@ function SelectedPostCard({
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button
               onClick={onOpenReply}
-              className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950 active:scale-95"
+              className="h-12 rounded-full bg-white text-sm font-semibold text-slate-950 active:scale-95"
             >
               Reply
             </button>
 
             <button
               onClick={onOpenReplies}
-              className="rounded-full bg-white/10 px-4 py-3 text-sm font-semibold text-white/65 active:scale-95"
+              className="h-12 rounded-full bg-white/10 text-sm font-semibold text-white/65 active:scale-95"
             >
               View All
             </button>
@@ -4460,7 +4467,7 @@ function handleCircularDial(event: PointerEvent<HTMLButtonElement>) {
 }
 
 if (orbitMode === "loop") {
-  return (
+ return (
   <div className="space-y-4">
     <div className="space-y-2">
       {modeSwitcher}
@@ -4511,19 +4518,20 @@ return (
       {modeSwitcher}
     </div>
 
-    {selectedPost && (
-      <SelectedPostCard
-  post={selectedPost}
-  person={selectedPerson}
-  currentUserId={currentUserId}
-  onReact={addCustomEmojiReaction}
-  onOpenReply={() => setIsReplyComposerOpen(true)}
-  onOpenReplies={() => setIsRepliesOpen(true)}
-/>
-    )}
+    <div className="rounded-[2.75rem] border border-white/10 bg-slate-900/50 p-3 shadow-2xl shadow-black/30 backdrop-blur-2xl">
+      {selectedPost && (
+        <SelectedPostCard
+          post={selectedPost}
+          person={selectedPerson}
+          currentUserId={currentUserId}
+          onReact={addCustomEmojiReaction}
+          onOpenReply={() => setIsReplyComposerOpen(true)}
+          onOpenReplies={() => setIsRepliesOpen(true)}
+        />
+      )}
 
-    <div
-      className="relative h-[330px] touch-pan-y overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-900/45 shadow-2xl shadow-black/30 backdrop-blur-2xl"
+      <div
+        className="relative mt-2 h-[255px] touch-pan-y overflow-hidden rounded-[2rem]"
       onPointerDown={(event) => {
   handleOrbitSwipeStart(event.clientX, event.clientY);
 }}
@@ -4534,7 +4542,7 @@ return (
         setTouchStartX(null);
       }}
     >
-      <div className="absolute left-1/2 top-[48%] h-20 w-20 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/10 blur-2xl" />
+      <div className="absolute left-1/2 top-[44%] h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/8 blur-3xl" />
 
       {posts.map((post, index) => {
         const position = getDepthPosition(index);
@@ -4546,7 +4554,7 @@ return (
             key={post.id}
             type="button"
             onClick={() => choosePost(index)}
-            className={`absolute left-1/2 top-[50%] grid h-24 w-24 place-items-center active:scale-95 ${
+            className={`absolute left-1/2 top-[46%] grid h-22 w-22 place-items-center active:scale-95 ${
               isDraggingOrbit ? "transition-none" : "transition-all duration-500 ease-out"
             }`}
             style={{
@@ -4583,18 +4591,18 @@ return (
 
               <div className="absolute inset-0 rounded-full bg-slate-950/10" />
 
-              {myBadges.length > 0 && (
-                <div className="absolute -right-1 -top-1 z-20 flex -space-x-1">
-                  {myBadges.map((emoji, badgeIndex) => (
-                    <span
-                      key={`${post.id}-${emoji}-${badgeIndex}`}
-                      className="grid h-6 w-6 place-items-center rounded-full border border-slate-950/40 bg-white text-xs shadow-lg shadow-black/30"
-                    >
-                      {emoji}
-                    </span>
-                  ))}
-                </div>
-              )}
+             {myBadges.length > 0 && (
+  <div className="absolute right-0 top-0 z-20 flex -translate-y-1/4 translate-x-1/4 -space-x-1">
+    {myBadges.slice(0, 2).map((emoji, badgeIndex) => (
+      <span
+        key={`${post.id}-${emoji}-${badgeIndex}`}
+        className="grid h-6 w-6 place-items-center rounded-full border border-slate-950/50 bg-white text-xs shadow-lg shadow-black/30"
+      >
+        {emoji}
+      </span>
+    ))}
+  </div>
+)}
 
               {isActive && (
                 <div className="absolute -bottom-2 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-black/30">
@@ -4609,7 +4617,7 @@ return (
       <button
         type="button"
         onClick={() => moveDial("prev")}
-        className="absolute bottom-7 left-5 z-[120] grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/45 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+        className="absolute bottom-5 left-4 z-[120] grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/45 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
       >
         ‹
       </button>
@@ -4617,13 +4625,14 @@ return (
       <button
         type="button"
         onClick={() => moveDial("next")}
-        className="absolute bottom-7 right-5 z-[120] grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/45 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+        className="absolute bottom-5 right-4 z-[120] grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/45 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
       >
         ›
       </button>
 
-            <div className="absolute bottom-8 left-1/2 z-[90] -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/50">
+                  <div className="absolute bottom-4 left-1/2 z-[90] -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/50">
         {selectedPostIndex + 1}/{posts.length}
+      </div>
       </div>
     </div>
 
