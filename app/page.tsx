@@ -7,6 +7,7 @@ import {
   getFirestore,
   doc,
   setDoc,
+  getDoc,
   getDocs,
   collection,
   updateDoc,
@@ -22,6 +23,7 @@ import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
   signOut,
+  updatePassword,
   updateProfile,
   type User,
 } from "firebase/auth";
@@ -47,6 +49,8 @@ type CurrentUser = {
   name: string;
   email: string;
   initials: string;
+  avatarColor: string;
+  status?: string;
 };
 
 type Person = {
@@ -221,7 +225,28 @@ const circleColors = [
   "from-teal-300 to-emerald-700",
 ];
 
+const avatarColors = [
+  "from-cyan-300 to-blue-500",
+  "from-lime-300 to-emerald-500",
+  "from-fuchsia-300 to-pink-500",
+  "from-orange-300 to-red-500",
+  "from-violet-300 to-indigo-500",
+  "from-rose-200 to-purple-500",
+  "from-yellow-200 to-orange-500",
+  "from-teal-300 to-cyan-600",
+];
+
 const initialCircles: Circle[] = [];
+
+function getInitials(name: string) {
+  return name
+    .trim()
+    .split(" ")
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
 
 function Avatar({ person, size = "md" }: { person: Person; size?: "sm" | "md" | "lg" }) {
   const sizeClass = size === "sm" ? "h-9 w-9 text-xs" : size === "lg" ? "h-16 w-16 text-lg" : "h-11 w-11 text-sm";
@@ -261,6 +286,7 @@ export default function Home() {
   const [incomingRequests, setIncomingRequests] = useState<FriendRequest[]>([]);
 const [isCreateGuestPassOpen, setIsCreateGuestPassOpen] = useState(false);
 const [isAddPersonOpen, setIsAddPersonOpen] = useState(false);
+const [isProfileOpen, setIsProfileOpen] = useState(false);
 const [guestPassContext, setGuestPassContext] = useState<{
   circleId: string;
   loopId?: string;
@@ -272,15 +298,6 @@ const [previewGuestPass, setPreviewGuestPass] = useState<GuestPass | null>(null)
 const selectedCircle =
   circles.find((circle) => circle.id === selectedCircleId) || null;
 
-function getInitials(name: string) {
-  return name
-    .trim()
-    .split(" ")
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
 
 function userToCurrentUser(user: User): CurrentUser {
   const displayName = user.displayName || user.email?.split("@")[0] || "User";
@@ -290,6 +307,8 @@ function userToCurrentUser(user: User): CurrentUser {
     name: displayName,
     email: user.email || "",
     initials: getInitials(displayName) || "ME",
+    avatarColor: avatarColors[0],
+    status: "",
   };
 }
 
@@ -309,9 +328,49 @@ async function createUserProfileDoc(user: User, name: string, email: string) {
       initials: getInitials(displayName) || "ME",
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      avatarColor: avatarColors[0],
+      status: "",
     },
     { merge: true }
   );
+}
+
+async function loadCurrentUserProfile(user: User): Promise<CurrentUser> {
+  const fallbackUser = userToCurrentUser(user);
+  const profileRef = doc(db, "users", user.uid);
+  const profileSnapshot = await getDoc(profileRef);
+
+  if (!profileSnapshot.exists()) {
+    return fallbackUser;
+  }
+
+  const data = profileSnapshot.data();
+
+  const name =
+    typeof data.name === "string" && data.name.trim()
+      ? data.name
+      : fallbackUser.name;
+
+  return {
+    ...fallbackUser,
+    name,
+    email:
+      typeof data.email === "string" && data.email.trim()
+        ? data.email
+        : fallbackUser.email,
+    initials:
+      typeof data.initials === "string" && data.initials.trim()
+        ? data.initials
+        : getInitials(name) || "ME",
+    avatarColor:
+      typeof data.avatarColor === "string" && data.avatarColor.trim()
+        ? data.avatarColor
+        : avatarColors[0],
+    status:
+      typeof data.status === "string"
+        ? data.status
+        : "",
+  };
 }
 
 function cleanPersonFromFirestore(data: FirestorePerson): Person {
@@ -529,9 +588,10 @@ function updateCircleLocallyAndInFirestore(
 }
 
 useEffect(() => {
-  const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+  const unsubscribe = onAuthStateChanged(firebaseAuth, async (user) => {
     if (user) {
-      setCurrentUser(userToCurrentUser(user));
+      const profile = await loadCurrentUserProfile(user);
+      setCurrentUser(profile);
     } else {
       setCurrentUser(null);
     }
@@ -928,6 +988,8 @@ setCurrentUser({
   name: name.trim(),
   email: credential.user.email || email.trim(),
   initials: getInitials(name.trim()) || "ME",
+  avatarColor: avatarColors[0],
+  status: "",
 });
 
 return;
@@ -946,6 +1008,49 @@ async function handleSignOut() {
   await signOut(firebaseAuth);
   setCurrentUser(null);
   setActiveTab("home");
+}
+
+async function handleUpdateProfile(profile: {
+  name: string;
+  avatarColor: string;
+  status: string;
+}) {
+  if (!currentUser || !firebaseAuth.currentUser) return;
+
+  const nextName = profile.name.trim() || currentUser.name;
+  const nextInitials = getInitials(nextName) || currentUser.initials;
+
+  await updateProfile(firebaseAuth.currentUser, {
+    displayName: nextName,
+  });
+
+  await setDoc(
+    doc(db, "users", currentUser.id),
+    {
+      name: nextName,
+      initials: nextInitials,
+      avatarColor: profile.avatarColor,
+      status: profile.status.trim(),
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
+
+  setCurrentUser({
+    ...currentUser,
+    name: nextName,
+    initials: nextInitials,
+    avatarColor: profile.avatarColor,
+    status: profile.status.trim(),
+  });
+}
+
+async function handleChangePassword(newPassword: string) {
+  if (!firebaseAuth.currentUser) {
+    throw new Error("You need to be signed in to change your password.");
+  }
+
+  await updatePassword(firebaseAuth.currentUser, newPassword);
 }
 
 if (authLoading) {
@@ -975,14 +1080,14 @@ if (!currentUser) {
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(11rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
           {activeTab === "home" && (
             <HomeView
-        circles={circles}
-        guestPassCount={guestPasses.length}
-        currentUser={currentUser}
-        onOpenCircle={openCircle}
-        selectedCircleId={selectedCircleId}
-        setSelectedCircleId={setSelectedCircleId}
-        onCreateCircle={() => setIsCreateCircleOpen(true)}
-        onSignOut={handleSignOut}
+  circles={circles}
+  guestPassCount={guestPasses.length}
+  currentUser={currentUser}
+  onOpenCircle={openCircle}
+  selectedCircleId={selectedCircleId}
+  setSelectedCircleId={setSelectedCircleId}
+  onCreateCircle={() => setIsCreateCircleOpen(true)}
+  onOpenProfile={() => setIsProfileOpen(true)}
 />
           )}
 
@@ -1036,6 +1141,16 @@ if (!currentUser) {
   requestCount={incomingRequests.length}
 />
 
+{isProfileOpen && (
+  <ProfileModal
+    currentUser={currentUser}
+    onClose={() => setIsProfileOpen(false)}
+    onUpdateProfile={handleUpdateProfile}
+    onChangePassword={handleChangePassword}
+    onSignOut={handleSignOut}
+  />
+)}
+
         {isCreateCircleOpen && (
          <CreateCircleModal
   contacts={contacts.filter((person) => person.status === "Friend")}
@@ -1086,6 +1201,234 @@ if (!currentUser) {
 
       </section>
     </main>
+  );
+}
+
+
+function ProfileModal({
+  currentUser,
+  onClose,
+  onUpdateProfile,
+  onChangePassword,
+  onSignOut,
+}: {
+  currentUser: CurrentUser;
+  onClose: () => void;
+  onUpdateProfile: (profile: {
+    name: string;
+    avatarColor: string;
+    status: string;
+  }) => Promise<void>;
+  onChangePassword: (newPassword: string) => Promise<void>;
+  onSignOut: () => void;
+}) {
+  const [name, setName] = useState(currentUser.name);
+  const [status, setStatus] = useState(currentUser.status || "");
+  const [avatarColor, setAvatarColor] = useState(currentUser.avatarColor);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+
+  const passwordReady =
+    newPassword.length >= 6 && newPassword === confirmPassword;
+
+  async function saveProfile() {
+    setError("");
+    setMessage("");
+    setSavingProfile(true);
+
+    try {
+      await onUpdateProfile({
+        name,
+        avatarColor,
+        status,
+      });
+
+      setMessage("Profile updated.");
+    } catch (profileError) {
+      setError(
+        profileError instanceof Error
+          ? profileError.message
+          : "Could not update profile."
+      );
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function savePassword() {
+    if (!passwordReady) return;
+
+    setError("");
+    setMessage("");
+    setSavingPassword(true);
+
+    try {
+      await onChangePassword(newPassword);
+      setNewPassword("");
+      setConfirmPassword("");
+      setMessage("Password updated.");
+    } catch (passwordError) {
+      setError(
+        passwordError instanceof Error
+          ? passwordError.message
+          : "Could not update password. You may need to sign out and sign in again first."
+      );
+    } finally {
+      setSavingPassword(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-[240] overflow-hidden bg-slate-950/80 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-2xl">
+      <div className="mx-auto flex h-full max-h-full w-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
+        <div className="shrink-0 border-b border-white/10 bg-slate-950/80 p-4 backdrop-blur-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm text-white/45">Profile</p>
+              <h2 className="mt-1 text-3xl font-semibold tracking-tight">
+                Your account.
+              </h2>
+            </div>
+
+            <button
+              onClick={onClose}
+              className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white/10 text-xl text-white/70 active:scale-95"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [-webkit-overflow-scrolling:touch]">
+          <div className="rounded-[2rem] border border-white/10 bg-white/8 p-4">
+            <div className="flex items-center gap-4">
+              <div
+                className={`grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br ${avatarColor} text-xl font-black text-slate-950 shadow-xl shadow-black/30 ring-2 ring-white/20`}
+              >
+                {getInitials(name) || currentUser.initials}
+              </div>
+
+              <div className="min-w-0">
+                <p className="truncate text-lg font-semibold">{name}</p>
+                <p className="truncate text-sm text-white/45">
+                  {currentUser.email}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <label className="text-sm text-white/60">Display name</label>
+              <input
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className="mt-2 w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
+              />
+            </div>
+
+            <div className="mt-4">
+              <label className="text-sm text-white/60">Status</label>
+              <input
+                value={status}
+                onChange={(event) => setStatus(event.target.value)}
+                placeholder="Free this weekend, low battery, planning mode..."
+                className="mt-2 w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
+              />
+            </div>
+
+            <div className="mt-4">
+              <label className="text-sm text-white/60">Avatar style</label>
+              <div className="mt-3 grid grid-cols-4 gap-3">
+                {avatarColors.map((color) => (
+                  <button
+                    key={color}
+                    onClick={() => setAvatarColor(color)}
+                    className={`grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br ${color} text-xs font-black text-slate-950 shadow-lg shadow-black/25 active:scale-95 ${
+                      avatarColor === color ? "ring-4 ring-white/70" : "ring-2 ring-white/10"
+                    }`}
+                  >
+                    {getInitials(name) || currentUser.initials}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              onClick={saveProfile}
+              disabled={savingProfile}
+              className="mt-5 w-full rounded-full bg-white px-5 py-4 font-semibold text-slate-950 active:scale-[0.98]"
+            >
+              {savingProfile ? "Saving..." : "Save Profile"}
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-[2rem] border border-white/10 bg-white/8 p-4">
+            <p className="text-sm font-semibold text-white/75">Change password</p>
+            <p className="mt-1 text-xs leading-5 text-white/40">
+              Firebase may ask you to sign in again before changing your password.
+            </p>
+
+            <div className="mt-4">
+              <label className="text-sm text-white/60">New password</label>
+              <input
+                type="password"
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                placeholder="At least 6 characters"
+                className="mt-2 w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
+              />
+            </div>
+
+            <div className="mt-4">
+              <label className="text-sm text-white/60">Confirm password</label>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                placeholder="Re-enter password"
+                className="mt-2 w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
+              />
+            </div>
+
+            <button
+              onClick={savePassword}
+              disabled={!passwordReady || savingPassword}
+              className={`mt-5 w-full rounded-full px-5 py-4 font-semibold active:scale-[0.98] ${
+                passwordReady
+                  ? "bg-white text-slate-950"
+                  : "bg-white/10 text-white/30"
+              }`}
+            >
+              {savingPassword ? "Updating..." : "Update Password"}
+            </button>
+          </div>
+
+          {(message || error) && (
+            <div
+              className={`mt-4 rounded-[1.5rem] px-4 py-3 text-sm leading-6 ${
+                error
+                  ? "border border-red-300/20 bg-red-500/10 text-red-100"
+                  : "border border-emerald-300/20 bg-emerald-500/10 text-emerald-100"
+              }`}
+            >
+              {error || message}
+            </div>
+          )}
+
+          <button
+            onClick={onSignOut}
+            className="mt-4 w-full rounded-full bg-white/10 px-5 py-4 font-semibold text-white/65 active:scale-[0.98]"
+          >
+            Sign out
+          </button>
+
+          <div className="h-8" />
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -1224,7 +1567,7 @@ function AuthScreen({
           </button>
 
           <p className="mt-4 text-center text-xs leading-5 text-white/35">
-            Firebase Auth is now handling account creation and sign in. App data is still mocked locally.
+            Your profile and Circles are saved securely.
           </p>
         </div>
       </section>
@@ -1254,7 +1597,7 @@ function HomeView({
   selectedCircleId,
   setSelectedCircleId,
   onCreateCircle,
-  onSignOut,
+  onOpenProfile,
 }: {
   circles: Circle[];
   guestPassCount: number;
@@ -1263,7 +1606,7 @@ function HomeView({
   selectedCircleId: string;
   setSelectedCircleId: (circleId: string) => void;
   onCreateCircle: () => void;
-  onSignOut: () => void;
+  onOpenProfile: () => void;
 }) {
   const overlapInsight = useMemo(() => {
     const counts = new Map<string, { person: Person; count: number }>();
@@ -1287,24 +1630,30 @@ function HomeView({
   return (
     <div className="space-y-5">
      <div className="rounded-[2.5rem] border border-white/10 bg-white/8 p-5 shadow-xl shadow-black/20 backdrop-blur-2xl">
-  <div className="flex items-center justify-between gap-3">
-    <div className="flex min-w-0 items-center gap-3">
-      <div className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-white text-sm font-black text-slate-950">
-        {currentUser.initials}
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-sm font-semibold">{currentUser.name}</p>
-        <p className="truncate text-xs text-white/45">{currentUser.email}</p>
-      </div>
-    </div>
-
+<div className="flex items-center justify-between gap-3">
+  <div className="flex min-w-0 items-center gap-3">
     <button
-      onClick={onSignOut}
-      className="rounded-full bg-white/10 px-3 py-2 text-xs font-semibold text-white/60 active:scale-95"
+      onClick={onOpenProfile}
+      className={`grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br ${currentUser.avatarColor} text-sm font-black text-slate-950 shadow-lg shadow-black/25 ring-2 ring-white/20 active:scale-95`}
     >
-      Sign out
+      {currentUser.initials}
     </button>
+
+    <div className="min-w-0">
+      <p className="truncate text-sm font-semibold">{currentUser.name}</p>
+      <p className="truncate text-xs text-white/45">
+        {currentUser.status || currentUser.email}
+      </p>
+    </div>
   </div>
+
+  <button
+    onClick={onOpenProfile}
+    className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white/60 active:scale-95"
+  >
+    Profile
+  </button>
+</div>
 
   <p className="mt-6 text-sm text-white/60">Today</p>
   <h2 className="mt-1 text-[2rem] font-semibold leading-tight tracking-tight">Stay close. Stay in the loop.</h2>
