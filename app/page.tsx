@@ -3903,7 +3903,7 @@ function RepliesModal({
   const replies = post.replies || [];
 
   return (
-    <div className="fixed inset-0 z-[500] flex items-start bg-slate-950/45 px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(12rem+env(safe-area-inset-top))] backdrop-blur-xl">
+    <div className="fixed inset-0 z-[500] flex items-start bg-slate-950/45 px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(9rem+env(safe-area-inset-top))] backdrop-blur-xl">
       <div className="mx-auto flex max-h-[calc(100dvh-13rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-[430px] flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 shadow-2xl shadow-black">
         <div className="shrink-0 border-b border-white/10 px-4 pb-4 pt-3">
           <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20" />
