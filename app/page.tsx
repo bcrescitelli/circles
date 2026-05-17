@@ -3903,7 +3903,7 @@ function RepliesModal({
   const replies = post.replies || [];
 
   return (
-    <div className="fixed inset-0 z-[500] flex items-start bg-slate-950/45 px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(9rem+env(safe-area-inset-top))] backdrop-blur-xl">
+    <div className="fixed inset-0 z-[590] flex items-start bg-slate-950/45 px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(7rem+env(safe-area-inset-top))] backdrop-blur-xl">
       <div className="mx-auto flex max-h-[calc(100dvh-13rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-[430px] flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 shadow-2xl shadow-black">
         <div className="shrink-0 border-b border-white/10 px-4 pb-4 pt-3">
           <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20" />
@@ -4008,7 +4008,7 @@ function RepliesModal({
           )}
         </div>
 
-        <div className="shrink-0 border-t border-white/10 bg-slate-950 p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+        <div className="shrink-0 border-t border-white/10 bg-slate-950 p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={onClose}
@@ -4070,8 +4070,8 @@ function ReplyComposerModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[280] flex items-end bg-slate-950/75 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(4rem+env(safe-area-inset-top))] backdrop-blur-2xl">
-      <div className="mx-auto flex max-h-[84dvh] w-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
+    <div className="fixed inset-0 z-[600] flex items-start bg-slate-950/75 px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-[calc(7rem+env(safe-area-inset-top))] backdrop-blur-2xl">
+      <div className="mx-auto flex max-h-[calc(100dvh-8rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] w-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
         <div className="shrink-0 border-b border-white/10 p-4">
           <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20" />
 
@@ -4159,7 +4159,7 @@ function ReplyComposerModal({
           )}
         </div>
 
-        <div className="shrink-0 border-t border-white/10 bg-slate-950/95 p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+        <div className="shrink-0 border-t border-white/10 bg-slate-950/95 p-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))]">
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={onClose}
@@ -4170,8 +4170,9 @@ function ReplyComposerModal({
             </button>
 
             <button
-              onClick={handleSubmit}
-              disabled={!canSend || isSending}
+            type="button"
+            onClick={handleSubmit}
+            disabled={!canSend || isSending}
               className={`rounded-full px-5 py-4 font-semibold active:scale-[0.98] ${
                 canSend && !isSending
                   ? "bg-white text-slate-950"
