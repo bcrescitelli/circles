@@ -75,6 +75,7 @@ type FriendRequest = {
   fromPersonId: string;
   toEmail: string;
   toUserId?: string;
+  toName?: string;
   status: "pending" | "accepted" | "ignored";
 };
 
@@ -211,6 +212,8 @@ type Circle = {
   coverType?: CircleCoverType;
   coverImage?: string;
   coverLabel?: string;
+  ownerId?: string;
+  memberIds?: string[];
   pulse: "Quiet" | "Warming" | "Active" | "Full Pulse";
   dailyPrompt: string;
   members: Person[];
@@ -471,6 +474,8 @@ function cleanPersonFromFirestore(data: FirestorePerson): Person {
 }
 
 function cleanCircleFromFirestore(data: FirestoreCircle): Circle {
+  const members = data.members || [];
+
   return {
     id: data.id,
     name: data.name,
@@ -479,9 +484,11 @@ function cleanCircleFromFirestore(data: FirestoreCircle): Circle {
     coverType: data.coverType || "gradient",
     coverImage: data.coverImage,
     coverLabel: data.coverLabel,
+    ownerId: data.ownerId,
+    memberIds: data.memberIds || members.map((member) => member.id),
     pulse: data.pulse,
     dailyPrompt: data.dailyPrompt,
-    members: data.members || [],
+    members,
     posts: data.posts || [],
     loop: data.loop || [],
     guest: data.guest,
@@ -514,6 +521,7 @@ function cleanFriendRequestFromFirestore(
     fromPersonId: data.fromPersonId,
     toEmail: data.toEmail,
     toUserId: data.toUserId,
+    toName: data.toName,
     status: data.status,
   };
 }
@@ -581,26 +589,37 @@ async function reconcileAcceptedOutgoingRequests(
   let nextPeople = [...loadedPeople];
 
   for (const request of acceptedRequests) {
+    if (!request.toUserId) continue;
+
     const matchingPerson = nextPeople.find(
       (person) =>
         person.id === request.fromPersonId ||
+        person.id === request.toUserId ||
         person.email?.toLowerCase() === request.toEmail.toLowerCase()
     );
 
-    if (!matchingPerson) continue;
+    const acceptedPerson: Person = {
+      id: request.toUserId,
+      name: request.toName || matchingPerson?.name || request.toEmail.split("@")[0],
+      email: request.toEmail,
+      initials:
+        getInitials(request.toName || matchingPerson?.name || request.toEmail.split("@")[0]) ||
+        "??",
+      color: matchingPerson?.color || "from-cyan-300 to-blue-500",
+      status: "Friend",
+    };
 
-    if (matchingPerson.status !== "Friend") {
-      const updatedPerson: Person = {
-        ...matchingPerson,
-        status: "Friend",
-      };
+    nextPeople = [
+      acceptedPerson,
+      ...nextPeople.filter(
+        (person) =>
+          person.id !== request.fromPersonId &&
+          person.id !== request.toUserId &&
+          person.email?.toLowerCase() !== request.toEmail.toLowerCase()
+      ),
+    ];
 
-      nextPeople = nextPeople.map((person) =>
-        person.id === matchingPerson.id ? updatedPerson : person
-      );
-
-      await savePersonToFirestore(userId, updatedPerson);
-    }
+    await savePersonToFirestore(userId, acceptedPerson);
   }
 
   return nextPeople;
@@ -632,10 +651,18 @@ async function loadPeopleFromFirestore(userId: string) {
 }
 
 async function saveCircleToFirestore(userId: string, circle: Circle) {
+  const memberIds = Array.from(
+    new Set([userId, ...(circle.memberIds || []), ...circle.members.map((member) => member.id)])
+  );
+
   await setDoc(
-    doc(db, "users", userId, "circles", circle.id),
+    doc(db, "circles", circle.id),
     {
-      ...sanitizeForFirestore(circle),
+      ...sanitizeForFirestore({
+        ...circle,
+        ownerId: circle.ownerId || userId,
+        memberIds,
+      }),
       updatedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
     },
@@ -644,8 +671,12 @@ async function saveCircleToFirestore(userId: string, circle: Circle) {
 }
 
 async function loadCirclesFromFirestore(userId: string) {
-  const circlesRef = collection(db, "users", userId, "circles");
-  const snapshot = await getDocs(circlesRef);
+  const circlesQuery = query(
+    collection(db, "circles"),
+    where("memberIds", "array-contains", userId)
+  );
+
+  const snapshot = await getDocs(circlesQuery);
 
   if (snapshot.empty) {
     return [];
@@ -766,15 +797,36 @@ useEffect(() => {
   }
 
 async function createCircle(newCircle: Circle) {
-  setCircles((currentCircles) => [newCircle, ...currentCircles]);
-  setSelectedCircleId(newCircle.id);
+  if (!currentUser) return;
+
+  const currentUserAsPerson: Person = {
+    id: currentUser.id,
+    name: currentUser.name,
+    initials: currentUser.initials,
+    color: currentUser.avatarColor || "from-white to-slate-300",
+    status: "Friend",
+    email: currentUser.email,
+  };
+
+  const uniqueMembers = [
+    currentUserAsPerson,
+    ...newCircle.members.filter((member) => member.id !== currentUser.id),
+  ];
+
+  const sharedCircle: Circle = {
+    ...newCircle,
+    ownerId: currentUser.id,
+    members: uniqueMembers,
+    memberIds: Array.from(new Set(uniqueMembers.map((member) => member.id))),
+  };
+
+  setCircles((currentCircles) => [sharedCircle, ...currentCircles]);
+  setSelectedCircleId(sharedCircle.id);
   setSelectedPostIndex(0);
   setIsCreateCircleOpen(false);
   setActiveTab("orbit");
 
-  if (currentUser) {
-    await saveCircleToFirestore(currentUser.id, newCircle);
-  }
+  await saveCircleToFirestore(currentUser.id, sharedCircle);
 }
 
 function addPostToCircle(caption: string, mood: string, photoUrl?: string) {
@@ -4474,7 +4526,6 @@ function CreateCircleModal({
 );
 
   function togglePerson(personId: string) {
-    if (personId === "brandon") return;
 
     setSelectedPeopleIds((currentIds) => {
       if (currentIds.includes(personId)) {
