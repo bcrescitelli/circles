@@ -2113,7 +2113,7 @@ if (!currentUser) {
   />
 )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(18rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(24rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
           {activeTab === "home" && (
   <HomeView
     circles={circles}
@@ -3903,9 +3903,9 @@ function RepliesModal({
   const replies = post.replies || [];
 
   return (
-    <div className="fixed inset-0 z-[275] flex items-end bg-slate-950/75 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(4rem+env(safe-area-inset-top))] backdrop-blur-2xl">
-      <div className="mx-auto flex max-h-[82dvh] w-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
-        <div className="shrink-0 border-b border-white/10 p-4">
+    <div className="fixed inset-0 z-[275] flex items-end bg-slate-950/70 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(4rem+env(safe-area-inset-top))] backdrop-blur-2xl">
+      <div className="mx-auto flex max-h-[84dvh] w-full max-w-[430px] flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 shadow-2xl shadow-black">
+        <div className="shrink-0 border-b border-white/10 px-4 pb-4 pt-3">
           <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-white/20" />
 
           <div className="flex items-start justify-between gap-4">
@@ -3923,89 +3923,92 @@ function RepliesModal({
               ×
             </button>
           </div>
-        </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-4 [-webkit-overflow-scrolling:touch]">
-          <div className="rounded-[1.5rem] border border-white/10 bg-white/8 p-3">
-            <div className="flex items-center gap-3">
-              {person ? (
-                <Avatar person={person} size="sm" />
-              ) : (
-                <div
-                  className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-xs font-black text-slate-950`}
-                >
-                  {post.personInitials}
-                </div>
-              )}
-
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-semibold">{post.personName}</p>
-                <p className="truncate text-xs text-white/40">
-                  {post.time} · {getPostExpirationLabel(post)}
-                </p>
+          <div className="mt-4 flex items-center gap-3">
+            {person ? (
+              <Avatar person={person} size="sm" />
+            ) : (
+              <div
+                className={`grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-xs font-black text-slate-950`}
+              >
+                {post.personInitials}
               </div>
-            </div>
-
-            {post.caption && (
-              <p className="mt-3 line-clamp-3 text-sm leading-5 text-white/70">
-                {post.caption}
-              </p>
             )}
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{post.personName}</p>
+              <p className="truncate text-xs text-white/40">
+                {post.time} · {getPostExpirationLabel(post)}
+              </p>
+            </div>
 
             {post.photoUrl && (
               <img
                 src={post.photoUrl}
                 alt={`${post.personName} post`}
-                className="mt-3 h-28 w-full rounded-[1.25rem] object-cover"
+                className="h-12 w-12 shrink-0 rounded-[0.9rem] object-cover"
               />
             )}
           </div>
 
-          <div className="mt-4 space-y-3 pb-4">
-            {replies.length > 0 ? (
-              replies.map((reply) => (
-                <div
-                  key={reply.id}
-                  className="rounded-[1.5rem] border border-white/10 bg-white/8 p-4"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-semibold">
-                      {reply.userName}
-                    </p>
-                    <p className="shrink-0 text-xs text-white/35">
-                      {reply.createdAt}
-                    </p>
-                  </div>
-
-                  {reply.text && (
-                    <p className="mt-2 text-sm leading-6 text-white/75">
-                      {reply.text}
-                    </p>
-                  )}
-
-                  {reply.imageUrl && (
-                    <img
-                      src={reply.imageUrl}
-                      alt={`${reply.userName} reply`}
-                      className="mt-3 max-h-64 w-full rounded-[1.25rem] object-cover"
-                    />
-                  )}
-                </div>
-              ))
-            ) : (
-              <div className="rounded-[1.5rem] bg-white/8 p-5 text-center">
-                <p className="text-sm font-semibold text-white/70">
-                  No replies yet.
-                </p>
-                <p className="mt-1 text-xs text-white/35">
-                  Be the first to respond.
-                </p>
-              </div>
-            )}
-          </div>
+          {post.caption && (
+            <p className="mt-3 line-clamp-3 text-sm leading-5 text-white/65">
+              {post.caption}
+            </p>
+          )}
         </div>
 
-        <div className="shrink-0 border-t border-white/10 bg-slate-950/95 p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [-webkit-overflow-scrolling:touch]">
+          {replies.length > 0 ? (
+            <div className="space-y-3 pb-4">
+              {replies.map((reply) => (
+                <div key={reply.id} className="flex gap-3">
+                  <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-bold text-white/60">
+                    {getInitials(reply.userName) || "?"}
+                  </div>
+
+                  <div className="min-w-0 flex-1 rounded-[1.35rem] bg-white/8 px-4 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="truncate text-sm font-semibold">
+                        {reply.userName}
+                      </p>
+                      <p className="shrink-0 text-xs text-white/35">
+                        {reply.createdAt}
+                      </p>
+                    </div>
+
+                    {reply.text && (
+                      <p className="mt-2 text-sm leading-6 text-white/75">
+                        {reply.text}
+                      </p>
+                    )}
+
+                    {reply.imageUrl && (
+                      <img
+                        src={reply.imageUrl}
+                        alt={`${reply.userName} reply`}
+                        className="mt-3 max-h-64 w-full rounded-[1.15rem] object-cover"
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid min-h-[180px] place-items-center rounded-[1.5rem] bg-white/5 px-6 text-center">
+              <div>
+                <p className="text-base font-semibold text-white/75">
+                  No replies yet.
+                </p>
+                <p className="mt-2 text-sm leading-6 text-white/40">
+                  Start the conversation with a quick note or photo.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="shrink-0 border-t border-white/10 bg-slate-950 p-4 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={onClose}
@@ -4313,7 +4316,7 @@ function SelectedPostCard({
         )}
       </button>
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="mt-4 flex items-center gap-3 pb-2">
         <button
           onClick={onOpenReply}
           className="h-12 flex-1 rounded-full bg-white text-sm font-semibold text-slate-950 active:scale-95"
