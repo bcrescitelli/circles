@@ -2049,8 +2049,10 @@ function OrbitView({
   const [circularDialAngle, setCircularDialAngle] = useState(0);
   const [orbitMode, setOrbitMode] = useState<"updates" | "loop">("updates");
 const [touchStartX, setTouchStartX] = useState<number | null>(null);
+const [touchStartY, setTouchStartY] = useState<number | null>(null);
 const [dragOffsetX, setDragOffsetX] = useState(0);
 const [isDraggingOrbit, setIsDraggingOrbit] = useState(false);
+const [isHorizontalOrbitDrag, setIsHorizontalOrbitDrag] = useState(false);
 const [customEmoji, setCustomEmoji] = useState("");
 const [replyText, setReplyText] = useState("");
 
@@ -2076,33 +2078,53 @@ const modeSwitcher = (
   </div>
 );
 
-function handleSwipeStart(startX: number) {
+function handleOrbitSwipeStart(startX: number, startY: number) {
   setTouchStartX(startX);
+  setTouchStartY(startY);
   setDragOffsetX(0);
-  setIsDraggingOrbit(true);
+  setIsDraggingOrbit(false);
+  setIsHorizontalOrbitDrag(false);
 }
 
-function handleSwipeMove(currentX: number) {
-  if (touchStartX === null) return;
+function handleOrbitSwipeMove(
+  currentX: number,
+  currentY: number,
+  event?: React.TouchEvent<HTMLDivElement>
+) {
+  if (touchStartX === null || touchStartY === null) return;
 
-  const nextOffset = currentX - touchStartX;
-  const clampedOffset = Math.max(-120, Math.min(120, nextOffset));
+  const deltaX = currentX - touchStartX;
+  const deltaY = currentY - touchStartY;
 
+  const isClearlyHorizontal = Math.abs(deltaX) > Math.abs(deltaY) + 12;
+
+  if (!isClearlyHorizontal && !isHorizontalOrbitDrag) {
+    return;
+  }
+
+  event?.preventDefault();
+
+  setIsHorizontalOrbitDrag(true);
+  setIsDraggingOrbit(true);
+
+  const clampedOffset = Math.max(-120, Math.min(120, deltaX));
   setDragOffsetX(clampedOffset);
 }
 
-function handleSwipeEnd(endX: number) {
+function handleOrbitSwipeEnd(endX: number) {
   if (touchStartX === null) return;
 
   const delta = touchStartX - endX;
 
-  if (Math.abs(delta) > 45) {
+  if (isHorizontalOrbitDrag && Math.abs(delta) > 45) {
     moveDial(delta > 0 ? "next" : "prev");
   }
 
   setTouchStartX(null);
+  setTouchStartY(null);
   setDragOffsetX(0);
   setIsDraggingOrbit(false);
+  setIsHorizontalOrbitDrag(false);
 }
 
 function addCustomEmojiReaction(emojiOverride?: string) {
@@ -2246,12 +2268,7 @@ if (orbitMode === "loop") {
   }
 
 return (
-  <div
-  className="flex h-full flex-col gap-4"
-  onTouchStart={(event) => handleSwipeStart(event.touches[0].clientX)}
-  onTouchMove={(event) => handleSwipeMove(event.touches[0].clientX)}
-  onTouchEnd={(event) => handleSwipeEnd(event.changedTouches[0].clientX)}
->
+<div className="flex h-full flex-col gap-4">
     {modeSwitcher}
     <div className="rounded-[1.75rem] border border-white/10 bg-white/8 px-4 py-3 backdrop-blur-2xl">
   <div className="flex items-center justify-between gap-3">
@@ -2270,7 +2287,23 @@ return (
   </div>
 </div>
    <div
-  className="relative h-[430px] shrink-0 overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900/45 shadow-2xl shadow-black/30 backdrop-blur-2xl"
+  className="relative h-[430px] shrink-0 touch-pan-y overflow-hidden rounded-[3rem] border border-white/10 bg-slate-900/45 shadow-2xl shadow-black/30 backdrop-blur-2xl"
+  onTouchStart={(event) =>
+    handleOrbitSwipeStart(
+      event.touches[0].clientX,
+      event.touches[0].clientY
+    )
+  }
+  onTouchMove={(event) =>
+    handleOrbitSwipeMove(
+      event.touches[0].clientX,
+      event.touches[0].clientY,
+      event
+    )
+  }
+  onTouchEnd={(event) =>
+    handleOrbitSwipeEnd(event.changedTouches[0].clientX)
+  }
 >
   <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(255,215,235,0.36),transparent_28%),radial-gradient(circle_at_80%_28%,rgba(186,230,253,0.22),transparent_28%),radial-gradient(circle_at_30%_82%,rgba(168,85,247,0.40),transparent_34%),linear-gradient(145deg,rgba(15,23,42,0.95),rgba(30,41,59,0.70))]" />
   <div className="absolute left-1/2 top-[58%] h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-fuchsia-300/10 blur-3xl" />
