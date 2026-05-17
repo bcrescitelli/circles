@@ -2444,27 +2444,81 @@ function chooseMemberColor(personId: string, color: string) {
               </div>
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-2">
-              {selectedPeople.map((person) => {
-                const isCurrentUser = person.id === currentUser.id;
+            <div className="mt-4 space-y-3">
+  {selectedPeople.map((person) => {
+    const isCurrentUser = person.id === currentUser.id;
+    const selectedColor = memberColorById[person.id] || person.color;
 
-                return (
-                  <button
-                    key={person.id}
-                    onClick={() => togglePerson(person.id)}
-                    disabled={isCurrentUser}
-                    className={`rounded-full px-3 py-2 text-xs font-semibold active:scale-95 ${
-                      isCurrentUser
-                        ? "bg-white text-slate-950"
-                        : "bg-white/10 text-white/65"
-                    }`}
-                  >
-                    {person.name}
-                    {!isCurrentUser && " ×"}
-                  </button>
-                );
-              })}
+    return (
+      <div
+        key={person.id}
+        className="rounded-[1.75rem] border border-white/10 bg-white/8 p-3"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar
+              person={{
+                ...person,
+                color: selectedColor,
+              }}
+              size="sm"
+            />
+
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{person.name}</p>
+              <p className="truncate text-xs text-white/40">
+                {isCurrentUser ? "You" : person.email || "Circle member"}
+              </p>
             </div>
+          </div>
+
+          {!isCurrentUser && (
+            <button
+              type="button"
+              onClick={() => togglePerson(person.id)}
+              className="rounded-full bg-white/10 px-3 py-2 text-xs font-semibold text-white/60 active:scale-95"
+            >
+              Remove
+            </button>
+          )}
+        </div>
+
+        <div className="mt-3">
+          <p className="text-[10px] uppercase tracking-[0.22em] text-white/35">
+            Circle color
+          </p>
+
+          <div className="mt-2 grid grid-cols-4 gap-2">
+            {avatarColors.map((color) => {
+              const usedBy = getUsedColorOwner(color);
+              const isUsedBySomeoneElse = Boolean(usedBy && usedBy !== person.id);
+              const isSelected = selectedColor === color;
+
+              return (
+                <button
+                  key={`${person.id}-${color}`}
+                  type="button"
+                  disabled={isUsedBySomeoneElse}
+                  onClick={() => chooseMemberColor(person.id, color)}
+                  className={`h-9 rounded-full border bg-gradient-to-br ${color} active:scale-95 ${
+                    isSelected
+                      ? "border-white ring-2 ring-white/40"
+                      : "border-white/10"
+                  } ${isUsedBySomeoneElse ? "opacity-20" : "opacity-100"}`}
+                  title={
+                    isUsedBySomeoneElse
+                      ? "Already used in this Circle"
+                      : "Choose color"
+                  }
+                />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  })}
+</div>
 
             {selectedPeople.length < 8 && (
               <>
@@ -2496,29 +2550,6 @@ function chooseMemberColor(personId: string, color: string) {
                           </p>
                         </div>
                       </div>
-
-                      <div className="mt-3 grid grid-cols-4 gap-2">
-  {avatarColors.map((color) => {
-    const usedBy = getUsedColorOwner(color);
-    const isUsedBySomeoneElse = Boolean(usedBy && usedBy !== person.id);
-    const isSelected = memberColorById[person.id] === color;
-
-    return (
-      <button
-        key={`${person.id}-${color}`}
-        type="button"
-        disabled={isUsedBySomeoneElse}
-        onClick={() => chooseMemberColor(person.id, color)}
-        className={`h-9 rounded-full border bg-gradient-to-br ${color} active:scale-95 ${
-          isSelected
-            ? "border-white ring-2 ring-white/40"
-            : "border-white/10"
-        } ${isUsedBySomeoneElse ? "opacity-25" : "opacity-100"}`}
-        title={isUsedBySomeoneElse ? "Already used in this Circle" : "Choose color"}
-      />
-    );
-  })}
-</div>
 
                       <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-950">
                         Add
@@ -4589,10 +4620,10 @@ return (
   {selectedPost && (
   <>
     <div
-      className={`pointer-events-none absolute -inset-20 rounded-[5rem] bg-gradient-to-br ${selectedPost.gradient} opacity-[0.36] blur-3xl transition-all duration-700`}
+      className={`pointer-events-none absolute -inset-20 rounded-[5rem] bg-gradient-to-br ${selectedPost.gradient} opacity-[0.42] blur-3xl transition-all duration-700 [mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)]`}
     />
     <div
-      className={`pointer-events-none absolute left-1/2 top-[62%] h-72 w-72 -translate-x-1/2 rounded-full bg-gradient-to-br ${selectedPost.personColor} opacity-25 blur-3xl transition-all duration-700`}
+      className={`pointer-events-none absolute left-1/2 top-[62%] h-72 w-72 -translate-x-1/2 rounded-full bg-gradient-to-br ${selectedPost.personColor} opacity-35 blur-3xl transition-all duration-700 [mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)]`}
     />
   </>
 )}
@@ -4610,6 +4641,28 @@ return (
         onOpenReplies={() => setIsRepliesOpen(true)}
       />
     )}
+
+    <div className="mt-2 flex items-center justify-center gap-3">
+  <button
+    type="button"
+    onClick={() => moveDial("prev")}
+    className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/10 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+  >
+    ‹
+  </button>
+
+  <div className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white/50">
+    {selectedPostIndex + 1}/{posts.length}
+  </div>
+
+  <button
+    type="button"
+    onClick={() => moveDial("next")}
+    className="grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/10 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
+  >
+    ›
+  </button>
+</div>
 
     <div
       className="relative -mt-2 h-[275px] touch-pan-y overflow-visible rounded-[2rem] pb-12"
@@ -4652,6 +4705,23 @@ return (
       : "border-white/10 shadow-black/30"
   }`}
 >
+  <div
+  className={`pointer-events-none absolute -inset-9 rounded-full bg-gradient-to-br ${post.gradient} shadow-2xl shadow-black/40 transition-all duration-500 ${
+    isActive ? "scale-110 opacity-90 blur-[2px]" : "scale-95 opacity-45 blur-[5px]"
+  }`}
+/>
+
+<div
+  className={`pointer-events-none absolute -inset-6 rounded-full bg-gradient-to-br ${post.personColor} transition-all duration-500 ${
+    isActive ? "scale-105 opacity-70 blur-[1px]" : "scale-95 opacity-35 blur-[4px]"
+  }`}
+/>
+
+<div
+  className={`pointer-events-none absolute -inset-3 rounded-full border border-white/25 bg-white/10 transition-all duration-500 ${
+    isActive ? "opacity-70" : "opacity-30"
+  }`}
+/>
   <div
     className={`pointer-events-none absolute -inset-8 rounded-[42%_58%_49%_51%/52%_42%_58%_48%] bg-gradient-to-br ${post.gradient} blur-xl shadow-2xl shadow-black/40 transition-all duration-500 ${
       isActive ? "scale-110 opacity-90" : "scale-95 opacity-45"
@@ -4704,26 +4774,6 @@ return (
           </button>
         );
       })}
-
-      <button
-        type="button"
-        onClick={() => moveDial("prev")}
-        className="absolute bottom-5 left-4 z-[120] grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/45 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
-      >
-        ‹
-      </button>
-
-      <button
-        type="button"
-        onClick={() => moveDial("next")}
-        className="absolute bottom-5 right-4 z-[120] grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-slate-950/45 text-xl text-white/75 shadow-xl backdrop-blur-xl active:scale-95"
-      >
-        ›
-      </button>
-
-                        <div className="absolute bottom-2 left-1/2 z-[90] -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/50">
-        {selectedPostIndex + 1}/{posts.length}
-      </div>
     </div>
   </div>
 </div>
