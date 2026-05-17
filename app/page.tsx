@@ -365,6 +365,21 @@ function getPostGradientForUser(userId: string) {
 
 const MAX_CIRCLE_NAME_LENGTH = 24;
 
+function getPostGradientFromPersonColor(personColor: string) {
+  const colorMap: Record<string, string> = {
+    "from-cyan-300 to-blue-500": "from-cyan-300 via-blue-500 to-indigo-700",
+    "from-lime-300 to-emerald-500": "from-lime-300 via-emerald-500 to-teal-700",
+    "from-fuchsia-300 to-pink-500": "from-fuchsia-300 via-pink-500 to-orange-400",
+    "from-orange-300 to-red-500": "from-orange-300 via-rose-500 to-red-700",
+    "from-violet-300 to-indigo-500": "from-violet-300 via-purple-500 to-slate-900",
+    "from-rose-200 to-purple-500": "from-rose-200 via-purple-500 to-indigo-800",
+    "from-yellow-200 to-orange-500": "from-yellow-200 via-orange-400 to-rose-600",
+    "from-teal-300 to-cyan-600": "from-teal-200 via-cyan-500 to-sky-800",
+  };
+
+  return colorMap[personColor] || "from-cyan-300 via-blue-500 to-indigo-700";
+}
+
 function getCircleAttentionScore(circle: Circle) {
   const postScore = circle.posts.length;
   const reactionScore = circle.posts.reduce(
@@ -1542,7 +1557,7 @@ const circleMemberColor =
     photoUrl: uploadedPhotoUrl,
     createdAtMs,
     expiresAtMs,
-    gradient: getPostGradientForUser(currentUser.id),
+    gradient: getPostGradientFromPersonColor(circleMemberColor),
     reactions: [],
     replies: [],
   };
@@ -2267,7 +2282,7 @@ if (!currentUser) {
   />
 )}
 
-      </section>
+            </section>
     </main>
   );
 }
@@ -2294,16 +2309,16 @@ function CircleSettingsModal({
   const [peopleSearch, setPeopleSearch] = useState("");
   const [confirmLeave, setConfirmLeave] = useState(false);
   const [memberColorById, setMemberColorById] = useState<Record<string, string>>(
-  () =>
-    Object.fromEntries(
-      circle.members.map((member) => [member.id, member.color])
-    )
-);
+    () =>
+      Object.fromEntries(
+        circle.members.map((member) => [member.id, member.color])
+      )
+  );
 
   const availablePeople = contacts.filter(
     (person) =>
       person.id !== currentUser.id &&
-      !circle.members.some((member) => member.id === person.id) &&
+      !selectedPeopleIds.includes(person.id) &&
       (person.name.toLowerCase().includes(peopleSearch.toLowerCase()) ||
         person.email?.toLowerCase().includes(peopleSearch.toLowerCase()))
   );
@@ -2335,55 +2350,73 @@ function CircleSettingsModal({
       return [...currentIds, personId];
     });
   }
+
   function getUsedColorOwner(color: string) {
-  return selectedPeopleIds.find(
-    (personId) => memberColorById[personId] === color
-  );
-}
+    return selectedPeopleIds.find(
+      (personId) => memberColorById[personId] === color
+    );
+  }
 
-function chooseMemberColor(personId: string, color: string) {
-  const usedBy = getUsedColorOwner(color);
+  function chooseMemberColor(personId: string, color: string) {
+    const usedBy = getUsedColorOwner(color);
 
-  if (usedBy && usedBy !== personId) return;
+    if (usedBy && usedBy !== personId) return;
 
-  setMemberColorById((currentColors) => ({
-    ...currentColors,
-    [personId]: color,
-  }));
-}
+    setMemberColorById((currentColors) => ({
+      ...currentColors,
+      [personId]: color,
+    }));
+  }
 
   function handleSave() {
-    if (!canSave) return;
+  if (!canSave) return;
 
   const currentUserAsPerson: Person = {
-  id: currentUser.id,
-  name: currentUser.name,
-  initials: currentUser.initials,
-  color: memberColorById[currentUser.id] || currentUser.avatarColor,
-  status: "Friend",
-  email: currentUser.email,
-  avatarUrl: currentUser.avatarUrl,
-};
+    id: currentUser.id,
+    name: currentUser.name,
+    initials: currentUser.initials,
+    color: memberColorById[currentUser.id] || currentUser.avatarColor,
+    status: "Friend",
+    email: currentUser.email,
+    avatarUrl: currentUser.avatarUrl,
+  };
 
   const nextMembers = [
-  currentUserAsPerson,
-  ...selectedPeople
-    .filter((person) => person.id !== currentUser.id)
-    .map((person) => ({
-      ...person,
-      color: memberColorById[person.id] || person.color,
-    })),
-];
+    currentUserAsPerson,
+    ...selectedPeople
+      .filter((person) => person.id !== currentUser.id)
+      .map((person) => ({
+        ...person,
+        color: memberColorById[person.id] || person.color,
+      })),
+  ];
 
-    const updatedCircle: Circle = {
-      ...circle,
-      name: circleName.trim(),
-      members: nextMembers,
-      memberIds: Array.from(new Set(nextMembers.map((member) => member.id))),
+  const colorByMemberId = Object.fromEntries(
+    nextMembers.map((member) => [member.id, member.color])
+  ) as Record<string, string>;
+
+  const updatedPosts = circle.posts.map((post) => {
+    const nextColor = colorByMemberId[post.personId];
+
+    if (!nextColor) return post;
+
+    return {
+      ...post,
+      personColor: nextColor,
+      gradient: getPostGradientFromPersonColor(nextColor),
     };
+  });
 
-    onSave(updatedCircle);
-  }
+  const updatedCircle: Circle = {
+    ...circle,
+    name: circleName.trim(),
+    members: nextMembers,
+    memberIds: Array.from(new Set(nextMembers.map((member) => member.id))),
+    posts: updatedPosts,
+  };
+
+  onSave(updatedCircle);
+}
 
   return (
     <div className="fixed inset-0 z-[260] overflow-hidden bg-slate-950/80 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-[calc(0.75rem+env(safe-area-inset-top))] backdrop-blur-2xl">
@@ -4620,15 +4653,15 @@ return (
   {selectedPost && (
   <>
     <div
-      className={`pointer-events-none absolute -inset-20 rounded-[5rem] bg-gradient-to-br ${selectedPost.gradient} opacity-[0.42] blur-3xl transition-all duration-700 [mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)]`}
+      className={`pointer-events-none absolute left-1/2 top-[48%] h-[34rem] w-[34rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br ${selectedPost.gradient} opacity-25 blur-3xl transition-all duration-700`}
     />
     <div
-      className={`pointer-events-none absolute left-1/2 top-[62%] h-72 w-72 -translate-x-1/2 rounded-full bg-gradient-to-br ${selectedPost.personColor} opacity-35 blur-3xl transition-all duration-700 [mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)] [-webkit-mask-image:linear-gradient(to_bottom,transparent_0%,black_15%,black_85%,transparent_100%)]`}
+      className={`pointer-events-none absolute left-1/2 top-[72%] h-80 w-80 -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-br ${selectedPost.personColor} opacity-20 blur-3xl transition-all duration-700`}
     />
   </>
 )}
 
-<div className="pointer-events-none absolute inset-0 rounded-[2.75rem] bg-slate-950/45" />
+<div className="pointer-events-none absolute inset-0 rounded-[2.75rem] bg-gradient-to-b from-slate-950/70 via-slate-950/35 to-slate-950/80" />
 
   <div className="relative z-10 space-y-2">
     {selectedPost && (
@@ -4676,7 +4709,6 @@ return (
         setTouchStartX(null);
       }}
     >
-      <div className="absolute left-1/2 top-[32%] h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/10 blur-3xl" />
 
       {posts.map((post, index) => {
         const position = getDepthPosition(index);
@@ -4684,95 +4716,66 @@ return (
         const isActive = index === selectedPostIndex;
 
         return (
-          <button
-            key={post.id}
-            type="button"
-            onClick={() => choosePost(index)}
-            className={`absolute left-1/2 top-[32%] grid h-[5.55rem] w-[5.55rem] place-items-center active:scale-95 ${
-  isDraggingOrbit ? "transition-none" : "transition-all duration-500 ease-out"
-}`}
-            style={{
-              transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px)) scale(${position.scale})`,
-              opacity: position.opacity,
-              filter: `blur(${position.blur}px)`,
-              zIndex: position.zIndex,
-            }}
-          >
-<div
-  className={`relative grid h-full w-full place-items-center overflow-visible rounded-full border shadow-xl transition-all duration-500 ${
-    isActive
-      ? "border-white/50 shadow-white/20 ring-4 ring-white/10"
-      : "border-white/10 shadow-black/30"
-  }`}
->
-  <div
-  className={`pointer-events-none absolute -inset-9 rounded-full bg-gradient-to-br ${post.gradient} shadow-2xl shadow-black/40 transition-all duration-500 ${
-    isActive ? "scale-110 opacity-90 blur-[2px]" : "scale-95 opacity-45 blur-[5px]"
-  }`}
-/>
-
-<div
-  className={`pointer-events-none absolute -inset-6 rounded-full bg-gradient-to-br ${post.personColor} transition-all duration-500 ${
-    isActive ? "scale-105 opacity-70 blur-[1px]" : "scale-95 opacity-35 blur-[4px]"
-  }`}
-/>
-
-<div
-  className={`pointer-events-none absolute -inset-3 rounded-full border border-white/25 bg-white/10 transition-all duration-500 ${
-    isActive ? "opacity-70" : "opacity-30"
-  }`}
-/>
-  <div
-    className={`pointer-events-none absolute -inset-8 rounded-[42%_58%_49%_51%/52%_42%_58%_48%] bg-gradient-to-br ${post.gradient} blur-xl shadow-2xl shadow-black/40 transition-all duration-500 ${
-      isActive ? "scale-110 opacity-90" : "scale-95 opacity-45"
+  <button
+    key={post.id}
+    type="button"
+    onClick={() => choosePost(index)}
+    className={`absolute left-1/2 top-[32%] grid h-[5.55rem] w-[5.55rem] place-items-center active:scale-95 ${
+      isDraggingOrbit ? "transition-none" : "transition-all duration-500 ease-out"
     }`}
-  />
-
-  <div
-    className={`pointer-events-none absolute -inset-4 rounded-[58%_42%_55%_45%/45%_55%_42%_58%] border border-white/20 bg-gradient-to-br ${post.personColor} blur-md transition-all duration-500 ${
-      isActive ? "opacity-65" : "opacity-30"
-    }`}
-  />
-
-  <div className="pointer-events-none absolute -inset-2 rounded-full bg-white/15 blur-md" />
-
-  <div
-    className={`relative grid overflow-hidden place-items-center rounded-full border border-white/45 bg-white/20 font-bold text-white shadow-xl shadow-black/30 transition-all duration-500 ${
-      isActive ? "h-20 w-20 text-base" : "h-16 w-16 text-sm"
-    }`}
+    style={{
+      transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px)) scale(${position.scale})`,
+      opacity: position.opacity,
+      filter: `blur(${position.blur}px)`,
+      zIndex: position.zIndex,
+    }}
   >
-    {post.photoUrl ? (
-      <img
-        src={post.photoUrl}
-        alt={`${post.personName} post`}
-        className="h-full w-full object-cover"
+    <div
+      className={`relative grid h-full w-full place-items-center overflow-visible rounded-full bg-gradient-to-br ${post.gradient} p-[3px] shadow-xl transition-all duration-500 ${
+        isActive ? "shadow-white/20 ring-4 ring-white/10" : "shadow-black/30"
+      }`}
+    >
+      <div
+        className={`absolute -inset-1 rounded-full bg-gradient-to-br ${post.personColor} transition-all duration-500 ${
+          isActive ? "opacity-60 blur-sm" : "opacity-25 blur-[3px]"
+        }`}
       />
-    ) : (
-      <span>{post.personInitials}</span>
-    )}
-  </div>
 
-  {myBadges.length > 0 && (
-    <div className="absolute right-1 top-1 z-20 flex -translate-y-1/3 translate-x-1/3 -space-x-1">
-      {myBadges.slice(0, 2).map((emoji, badgeIndex) => (
-        <span
-          key={`${post.id}-${emoji}-${badgeIndex}`}
-          className="grid h-6 w-6 place-items-center rounded-full border border-slate-950/50 bg-white text-xs shadow-lg shadow-black/30"
-        >
-          {emoji}
-        </span>
-      ))}
-    </div>
-  )}
+      <div className="relative grid h-full w-full place-items-center overflow-hidden rounded-full border border-white/25 bg-slate-950/30">
+        {post.photoUrl ? (
+          <img
+            src={post.photoUrl}
+            alt={`${post.personName} post`}
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <span className="text-sm font-black text-white">
+            {post.personInitials}
+          </span>
+        )}
+      </div>
 
-  {isActive && (
-    <div className="absolute -bottom-2 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-black/30">
-      {post.personName.split(" ")[0]}
+      {myBadges.length > 0 && (
+        <div className="absolute right-1 top-1 z-20 flex -translate-y-1/3 translate-x-1/3 -space-x-1">
+          {myBadges.slice(0, 2).map((emoji, badgeIndex) => (
+            <span
+              key={`${post.id}-${emoji}-${badgeIndex}`}
+              className="grid h-6 w-6 place-items-center rounded-full border border-slate-950/50 bg-white text-xs shadow-lg shadow-black/30"
+            >
+              {emoji}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {isActive && (
+        <div className="absolute -bottom-2 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-black/30">
+          {post.personName.split(" ")[0]}
+        </div>
+      )}
     </div>
-  )}
-</div>
-          </button>
-        );
+  </button>
+);
       })}
     </div>
   </div>
