@@ -1520,13 +1520,20 @@ async function addPostToCircle(caption: string, mood: string, photoFile?: File) 
 
 const createdAtMs = Date.now();
 const expiresAtMs = createdAtMs + POST_EXPIRATION_MS;
+const currentCircleMember = selectedCircle?.members.find(
+  (member) => member.id === currentUser.id
+);
+const circleMemberColor =
+  currentCircleMember?.color ||
+  currentUser.avatarColor ||
+  getStableColorFromString(currentUser.id);
 
   const newPost: Post = {
     id: `post-${Date.now()}`,
     personId: currentUser.id,
     personName: currentUser.name,
     personInitials: currentUser.initials,
-    personColor: currentUser.avatarColor || getStableColorFromString(currentUser.id),
+    personColor: circleMemberColor,
     personAvatarUrl: currentUser.avatarUrl,
     caption,
     time: "Just now",
@@ -2286,6 +2293,12 @@ function CircleSettingsModal({
   );
   const [peopleSearch, setPeopleSearch] = useState("");
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [memberColorById, setMemberColorById] = useState<Record<string, string>>(
+  () =>
+    Object.fromEntries(
+      circle.members.map((member) => [member.id, member.color])
+    )
+);
 
   const availablePeople = contacts.filter(
     (person) =>
@@ -2322,24 +2335,45 @@ function CircleSettingsModal({
       return [...currentIds, personId];
     });
   }
+  function getUsedColorOwner(color: string) {
+  return selectedPeopleIds.find(
+    (personId) => memberColorById[personId] === color
+  );
+}
+
+function chooseMemberColor(personId: string, color: string) {
+  const usedBy = getUsedColorOwner(color);
+
+  if (usedBy && usedBy !== personId) return;
+
+  setMemberColorById((currentColors) => ({
+    ...currentColors,
+    [personId]: color,
+  }));
+}
 
   function handleSave() {
     if (!canSave) return;
 
-    const currentUserAsPerson: Person = {
+  const currentUserAsPerson: Person = {
   id: currentUser.id,
   name: currentUser.name,
   initials: currentUser.initials,
-  color: currentUser.avatarColor,
+  color: memberColorById[currentUser.id] || currentUser.avatarColor,
   status: "Friend",
   email: currentUser.email,
   avatarUrl: currentUser.avatarUrl,
 };
 
-    const nextMembers = [
-      currentUserAsPerson,
-      ...selectedPeople.filter((person) => person.id !== currentUser.id),
-    ];
+  const nextMembers = [
+  currentUserAsPerson,
+  ...selectedPeople
+    .filter((person) => person.id !== currentUser.id)
+    .map((person) => ({
+      ...person,
+      color: memberColorById[person.id] || person.color,
+    })),
+];
 
     const updatedCircle: Circle = {
       ...circle,
@@ -2462,6 +2496,29 @@ function CircleSettingsModal({
                           </p>
                         </div>
                       </div>
+
+                      <div className="mt-3 grid grid-cols-4 gap-2">
+  {avatarColors.map((color) => {
+    const usedBy = getUsedColorOwner(color);
+    const isUsedBySomeoneElse = Boolean(usedBy && usedBy !== person.id);
+    const isSelected = memberColorById[person.id] === color;
+
+    return (
+      <button
+        key={`${person.id}-${color}`}
+        type="button"
+        disabled={isUsedBySomeoneElse}
+        onClick={() => chooseMemberColor(person.id, color)}
+        className={`h-9 rounded-full border bg-gradient-to-br ${color} active:scale-95 ${
+          isSelected
+            ? "border-white ring-2 ring-white/40"
+            : "border-white/10"
+        } ${isUsedBySomeoneElse ? "opacity-25" : "opacity-100"}`}
+        title={isUsedBySomeoneElse ? "Already used in this Circle" : "Choose color"}
+      />
+    );
+  })}
+</div>
 
                       <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-slate-950">
                         Add
@@ -4002,19 +4059,29 @@ function ReplyComposerModal({
           )}
         </div>
 
-        <div className="shrink-0 border-t border-white/10 p-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
-          <button
-            onClick={handleSubmit}
-            disabled={!canSend || isSending}
-            className={`w-full rounded-full px-5 py-4 font-semibold active:scale-[0.98] ${
-              canSend && !isSending
-                ? "bg-white text-slate-950"
-                : "bg-white/10 text-white/30"
-            }`}
-          >
-            {isSending ? "Sending..." : "Send Reply"}
-          </button>
-        </div>
+  <div className="shrink-0 border-t border-white/10 p-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
+  <div className="grid grid-cols-2 gap-2">
+    <button
+      onClick={onClose}
+      type="button"
+      className="rounded-full bg-white/10 px-5 py-4 font-semibold text-white/65 active:scale-[0.98]"
+    >
+      Back to Circle
+    </button>
+
+    <button
+      onClick={handleSubmit}
+      disabled={!canSend || isSending}
+      className={`rounded-full px-5 py-4 font-semibold active:scale-[0.98] ${
+        canSend && !isSending
+          ? "bg-white text-slate-950"
+          : "bg-white/10 text-white/30"
+      }`}
+    >
+      {isSending ? "Sending..." : "Send"}
+    </button>
+  </div>
+</div>
       </div>
     </div>
   );
@@ -4520,12 +4587,17 @@ return (
 
     <div className="relative overflow-hidden rounded-[2.75rem] border border-white/10 bg-slate-900/50 p-3 shadow-2xl shadow-black/30 backdrop-blur-2xl">
   {selectedPost && (
+  <>
     <div
-      className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${selectedPost.gradient} opacity-[0.32] blur-2xl transition-all duration-500`}
+      className={`pointer-events-none absolute -inset-20 rounded-[5rem] bg-gradient-to-br ${selectedPost.gradient} opacity-[0.36] blur-3xl transition-all duration-700`}
     />
-  )}
+    <div
+      className={`pointer-events-none absolute left-1/2 top-[62%] h-72 w-72 -translate-x-1/2 rounded-full bg-gradient-to-br ${selectedPost.personColor} opacity-25 blur-3xl transition-all duration-700`}
+    />
+  </>
+)}
 
-  <div className="pointer-events-none absolute inset-0 bg-slate-950/35" />
+<div className="pointer-events-none absolute inset-0 rounded-[2.75rem] bg-slate-950/45" />
 
   <div className="relative z-10 space-y-2">
     {selectedPost && (
@@ -4540,7 +4612,7 @@ return (
     )}
 
     <div
-      className="relative -mt-1 h-[215px] touch-pan-y overflow-visible rounded-[2rem]"
+      className="relative -mt-2 h-[275px] touch-pan-y overflow-visible rounded-[2rem] pb-12"
       onPointerDown={(event) => {
   handleOrbitSwipeStart(event.clientX, event.clientY);
 }}
@@ -4551,7 +4623,7 @@ return (
         setTouchStartX(null);
       }}
     >
-      <div className="absolute left-1/2 top-[34%] h-36 w-36 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/10 blur-3xl" />
+      <div className="absolute left-1/2 top-[32%] h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/10 blur-3xl" />
 
       {posts.map((post, index) => {
         const position = getDepthPosition(index);
@@ -4563,7 +4635,7 @@ return (
             key={post.id}
             type="button"
             onClick={() => choosePost(index)}
-            className={`absolute left-1/2 top-[34%] grid h-[5.4rem] w-[5.4rem] place-items-center active:scale-95 ${
+            className={`absolute left-1/2 top-[32%] grid h-[5.55rem] w-[5.55rem] place-items-center active:scale-95 ${
   isDraggingOrbit ? "transition-none" : "transition-all duration-500 ease-out"
 }`}
             style={{
@@ -4573,65 +4645,62 @@ return (
               zIndex: position.zIndex,
             }}
           >
-            <div
+<div
   className={`relative grid h-full w-full place-items-center overflow-visible rounded-full border shadow-xl transition-all duration-500 ${
     isActive
       ? "border-white/50 shadow-white/20 ring-4 ring-white/10"
       : "border-white/10 shadow-black/30"
   }`}
 >
+  <div
+    className={`pointer-events-none absolute -inset-8 rounded-[42%_58%_49%_51%/52%_42%_58%_48%] bg-gradient-to-br ${post.gradient} blur-xl shadow-2xl shadow-black/40 transition-all duration-500 ${
+      isActive ? "scale-110 opacity-90" : "scale-95 opacity-45"
+    }`}
+  />
 
   <div
-  className={`pointer-events-none absolute -inset-7 rounded-[45%_55%_50%_40%/55%_45%_55%_45%] bg-gradient-to-br ${post.gradient} blur-2xl transition-all duration-500 ${
-    isActive ? "opacity-75 scale-110" : "opacity-35 scale-95"
-  }`}
-/>
+    className={`pointer-events-none absolute -inset-4 rounded-[58%_42%_55%_45%/45%_55%_42%_58%] border border-white/20 bg-gradient-to-br ${post.personColor} blur-md transition-all duration-500 ${
+      isActive ? "opacity-65" : "opacity-30"
+    }`}
+  />
 
-<div
-  className={`pointer-events-none absolute -inset-4 rounded-[60%_40%_45%_55%/45%_60%_40%_55%] bg-gradient-to-tr ${post.personColor} blur-xl transition-all duration-500 ${
-    isActive ? "opacity-55" : "opacity-25"
-  }`}
-/>
+  <div className="pointer-events-none absolute -inset-2 rounded-full bg-white/15 blur-md" />
 
-<div
-  className={`absolute inset-0 rounded-full bg-gradient-to-br ${post.gradient}`}
-/>
-
-              {post.photoUrl ? (
-                <img
-                  src={post.photoUrl}
-                  alt={`${post.personName} post`}
-                  className="absolute inset-0 h-full w-full rounded-full object-cover"
-                />
-              ) : (
-                <div
-                  className={`relative z-10 grid h-14 w-14 place-items-center rounded-full bg-gradient-to-br ${post.personColor} text-sm font-black text-slate-950`}
-                >
-                  {post.personInitials}
-                </div>
-              )}
-
-              <div className="absolute inset-0 rounded-full bg-slate-950/10" />
-
-             {myBadges.length > 0 && (
-  <div className="absolute right-1 top-1 z-20 flex -translate-y-1/3 translate-x-1/3 -space-x-1">
-    {myBadges.slice(0, 2).map((emoji, badgeIndex) => (
-      <span
-        key={`${post.id}-${emoji}-${badgeIndex}`}
-        className="grid h-6 w-6 place-items-center rounded-full border border-slate-950/50 bg-white text-xs shadow-lg shadow-black/30"
-      >
-        {emoji}
-      </span>
-    ))}
+  <div
+    className={`relative grid overflow-hidden place-items-center rounded-full border border-white/45 bg-white/20 font-bold text-white shadow-xl shadow-black/30 transition-all duration-500 ${
+      isActive ? "h-20 w-20 text-base" : "h-16 w-16 text-sm"
+    }`}
+  >
+    {post.photoUrl ? (
+      <img
+        src={post.photoUrl}
+        alt={`${post.personName} post`}
+        className="h-full w-full object-cover"
+      />
+    ) : (
+      <span>{post.personInitials}</span>
+    )}
   </div>
-)}
 
-              {isActive && (
-                <div className="absolute -bottom-2 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-black/30">
-                  {post.personName.split(" ")[0]}
-                </div>
-              )}
-            </div>
+  {myBadges.length > 0 && (
+    <div className="absolute right-1 top-1 z-20 flex -translate-y-1/3 translate-x-1/3 -space-x-1">
+      {myBadges.slice(0, 2).map((emoji, badgeIndex) => (
+        <span
+          key={`${post.id}-${emoji}-${badgeIndex}`}
+          className="grid h-6 w-6 place-items-center rounded-full border border-slate-950/50 bg-white text-xs shadow-lg shadow-black/30"
+        >
+          {emoji}
+        </span>
+      ))}
+    </div>
+  )}
+
+  {isActive && (
+    <div className="absolute -bottom-2 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-black/30">
+      {post.personName.split(" ")[0]}
+    </div>
+  )}
+</div>
           </button>
         );
       })}
