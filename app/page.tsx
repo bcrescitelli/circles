@@ -2091,7 +2091,7 @@ if (!currentUser) {
   />
 )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(14rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
+        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(18rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
           {activeTab === "home" && (
   <HomeView
     circles={circles}
@@ -3784,7 +3784,7 @@ function RepliesModal({
 
   return (
     <div className="fixed inset-0 z-[275] bg-slate-950/80 px-4 py-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-2xl">
-      <div className="mx-auto flex h-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
+      <div className="mx-auto flex h-[calc(100%-1.5rem)] max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
         <div className="shrink-0 border-b border-white/10 p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -3873,7 +3873,7 @@ function RepliesModal({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className="shrink-0 border-t border-white/10 p-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
           <button
             onClick={onOpenReply}
             className="w-full rounded-full bg-white px-5 py-4 font-semibold text-slate-950 active:scale-[0.98]"
@@ -3927,7 +3927,7 @@ function ReplyComposerModal({
 
   return (
     <div className="fixed inset-0 z-[280] bg-slate-950/80 px-4 py-[calc(1rem+env(safe-area-inset-top))] backdrop-blur-2xl">
-      <div className="mx-auto flex h-full max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
+      <div className="mx-auto flex h-[calc(100%-1.5rem)] max-w-[430px] flex-col overflow-hidden rounded-[2.25rem] border border-white/10 bg-slate-950/95 shadow-2xl shadow-black">
         <div className="shrink-0 border-b border-white/10 p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -4002,7 +4002,7 @@ function ReplyComposerModal({
           )}
         </div>
 
-        <div className="shrink-0 border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className="shrink-0 border-t border-white/10 p-4 pb-[calc(5rem+env(safe-area-inset-bottom))]">
           <button
             onClick={handleSubmit}
             disabled={!canSend || isSending}
@@ -4518,20 +4518,29 @@ return (
       {modeSwitcher}
     </div>
 
-    <div className="rounded-[2.75rem] border border-white/10 bg-slate-900/50 p-3 shadow-2xl shadow-black/30 backdrop-blur-2xl">
-      {selectedPost && (
-        <SelectedPostCard
-          post={selectedPost}
-          person={selectedPerson}
-          currentUserId={currentUserId}
-          onReact={addCustomEmojiReaction}
-          onOpenReply={() => setIsReplyComposerOpen(true)}
-          onOpenReplies={() => setIsRepliesOpen(true)}
-        />
-      )}
+    <div className="relative overflow-hidden rounded-[2.75rem] border border-white/10 bg-slate-900/50 p-3 shadow-2xl shadow-black/30 backdrop-blur-2xl">
+  {selectedPost && (
+    <div
+      className={`pointer-events-none absolute inset-0 bg-gradient-to-br ${selectedPost.gradient} opacity-[0.18] blur-2xl transition-all duration-500`}
+    />
+  )}
 
-      <div
-        className="relative mt-2 h-[255px] touch-pan-y overflow-hidden rounded-[2rem]"
+  <div className="pointer-events-none absolute inset-0 bg-slate-950/35" />
+
+  <div className="relative z-10 space-y-2">
+    {selectedPost && (
+      <SelectedPostCard
+        post={selectedPost}
+        person={selectedPerson}
+        currentUserId={currentUserId}
+        onReact={addCustomEmojiReaction}
+        onOpenReply={() => setIsReplyComposerOpen(true)}
+        onOpenReplies={() => setIsRepliesOpen(true)}
+      />
+    )}
+
+    <div
+      className="relative -mt-1 h-[215px] touch-pan-y overflow-visible rounded-[2rem]"
       onPointerDown={(event) => {
   handleOrbitSwipeStart(event.clientX, event.clientY);
 }}
@@ -4542,7 +4551,7 @@ return (
         setTouchStartX(null);
       }}
     >
-      <div className="absolute left-1/2 top-[44%] h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/8 blur-3xl" />
+      <div className="absolute left-1/2 top-[38%] h-32 w-32 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/8 blur-3xl" />
 
       {posts.map((post, index) => {
         const position = getDepthPosition(index);
@@ -4565,15 +4574,16 @@ return (
             }}
           >
             <div
-              className={`relative grid h-full w-full place-items-center overflow-visible rounded-full border shadow-xl ${
-                isActive
-                  ? "border-white/35 shadow-white/15"
-                  : "border-white/10 shadow-black/30"
-              }`}
-            >
-              <div
-                className={`absolute inset-0 rounded-full bg-gradient-to-br ${post.gradient}`}
-              />
+  className={`relative grid h-full w-full place-items-center overflow-visible rounded-full border shadow-xl transition-all duration-500 ${
+    isActive
+      ? "border-white/50 shadow-white/20 ring-4 ring-white/10"
+      : "border-white/10 shadow-black/30"
+  }`}
+>
+
+<div
+  className={`absolute inset-0 rounded-full bg-gradient-to-br ${post.gradient}`}
+/>
 
               {post.photoUrl ? (
                 <img
@@ -4592,7 +4602,7 @@ return (
               <div className="absolute inset-0 rounded-full bg-slate-950/10" />
 
              {myBadges.length > 0 && (
-  <div className="absolute right-0 top-0 z-20 flex -translate-y-1/4 translate-x-1/4 -space-x-1">
+  <div className="absolute right-1 top-1 z-20 flex -translate-y-1/3 translate-x-1/3 -space-x-1">
     {myBadges.slice(0, 2).map((emoji, badgeIndex) => (
       <span
         key={`${post.id}-${emoji}-${badgeIndex}`}
@@ -4630,11 +4640,12 @@ return (
         ›
       </button>
 
-                  <div className="absolute bottom-4 left-1/2 z-[90] -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/50">
+                        <div className="absolute bottom-2 left-1/2 z-[90] -translate-x-1/2 rounded-full bg-white/10 px-3 py-1 text-xs text-white/50">
         {selectedPostIndex + 1}/{posts.length}
       </div>
-      </div>
     </div>
+  </div>
+</div>
 
     {selectedPost && isReplyComposerOpen && (
       <ReplyComposerModal
