@@ -51,7 +51,13 @@ const storage = getStorage(firebaseApp);
 
 type CircleType = "Close Friends" | "Plans" | "Travel" | "Guest Orbit";
 type ContactStatus = "Friend" | "Pending" | "Guest" | "Suggested";
-type ActiveTab = "home" | "orbit" | "circle" | "people";
+type ActiveTab =
+  | "home"
+  | "circles"
+  | "orbit"
+  | "loops"
+  | "people"
+  | "circleDetail";
 
 type CurrentUser = {
   id: string;
@@ -447,9 +453,11 @@ function getComingSoonLoops(circles: Circle[]) {
 type OrbitNeed = {
   id: string;
   type: "Vote" | "Expiring" | "Plan" | "Invite" | "Catch Up";
+  destination: "circle" | "loops" | "people";
   title: string;
   detail: string;
   circleId?: string;
+  loopId?: string;
 };
 
 type OrbitHotCircle = {
@@ -470,6 +478,8 @@ type OrbitBrief = {
   nextMoveTitle: string;
   nextMoveDetail: string;
   nextMoveCircleId?: string;
+  nextMoveLoopId?: string;
+  nextMoveDestination?: "circle" | "loops" | "people";
   stats: string[];
   needs: OrbitNeed[];
   hotCircles: OrbitHotCircle[];
@@ -774,35 +784,41 @@ function calculateOrbitBrief(
     reason = `${topCircle.circle.name} is carrying most of your Orbit right now.`;
   }
 
-  const needs: OrbitNeed[] = [
-    ...openPolls.slice(0, 2).map(({ circle, loop }) => ({
-      id: `poll-${circle.id}-${loop.id}`,
-      type: "Vote" as const,
-      title: "Vote needed",
-      detail: `${loop.title} in ${circle.name}`,
-      circleId: circle.id,
-    })),
-    ...expiringPosts.slice(0, 2).map(({ circle, post }) => ({
-      id: `expiring-${circle.id}-${post.id}`,
-      type: "Expiring" as const,
-      title: "Post expiring soon",
-      detail: `${post.personName}'s post in ${circle.name}`,
-      circleId: circle.id,
-    })),
-    ...stuckLoops.slice(0, 2).map(({ circle, loop }) => ({
-      id: `stuck-${circle.id}-${loop.id}`,
-      type: "Plan" as const,
-      title: "Plan needs shape",
-      detail: `${loop.title} in ${circle.name}`,
-      circleId: circle.id,
-    })),
-    ...incomingRequests.slice(0, 1).map((request) => ({
-      id: `request-${request.id}`,
-      type: "Invite" as const,
-      title: "Friend request",
-      detail: `${request.fromName} wants to connect`,
-    })),
-  ].slice(0, 5);
+ const needs: OrbitNeed[] = [
+  ...openPolls.slice(0, 2).map(({ circle, loop }) => ({
+    id: `poll-${circle.id}-${loop.id}`,
+    type: "Vote" as const,
+    destination: "loops" as const,
+    title: "Vote needed",
+    detail: `${loop.title} in ${circle.name}`,
+    circleId: circle.id,
+    loopId: loop.id,
+  })),
+  ...expiringPosts.slice(0, 2).map(({ circle, post }) => ({
+    id: `expiring-${circle.id}-${post.id}`,
+    type: "Expiring" as const,
+    destination: "circle" as const,
+    title: "Post expiring soon",
+    detail: `${post.personName}'s post in ${circle.name}`,
+    circleId: circle.id,
+  })),
+  ...stuckLoops.slice(0, 2).map(({ circle, loop }) => ({
+    id: `stuck-${circle.id}-${loop.id}`,
+    type: "Plan" as const,
+    destination: "loops" as const,
+    title: "Plan needs shape",
+    detail: `${loop.title} in ${circle.name}`,
+    circleId: circle.id,
+    loopId: loop.id,
+  })),
+  ...incomingRequests.slice(0, 1).map((request) => ({
+    id: `request-${request.id}`,
+    type: "Invite" as const,
+    destination: "people" as const,
+    title: "Friend request",
+    detail: `${request.fromName} wants to connect`,
+  })),
+].slice(0, 5);
 
   const firstNeed = needs[0];
 
@@ -823,6 +839,8 @@ function calculateOrbitBrief(
     nextMoveTitle,
     nextMoveDetail,
     nextMoveCircleId: firstNeed?.circleId || topCircle?.circle.id,
+    nextMoveLoopId: firstNeed?.loopId,
+    nextMoveDestination: firstNeed?.destination || (topCircle ? "circle" : undefined),
     stats: [
       `${activeLoops.length} active ${activeLoops.length === 1 ? "Loop" : "Loops"}`,
       `${openPolls.length} open ${openPolls.length === 1 ? "poll" : "polls"}`,
@@ -922,6 +940,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [selectedCircleId, setSelectedCircleId] = useState("");
   const [selectedPostIndex, setSelectedPostIndex] = useState(0);
+  const [selectedLoopId, setSelectedLoopId] = useState("");
   const [isCreateCircleOpen, setIsCreateCircleOpen] = useState(false);
   const [isAddUpdateOpen, setIsAddUpdateOpen] = useState(false);
   const [isCreateLoopOpen, setIsCreateLoopOpen] = useState(false);
@@ -1355,7 +1374,14 @@ useEffect(() => {
   function openCircle(circleId: string) {
   setSelectedCircleId(circleId);
   setSelectedPostIndex(0);
-  setActiveTab("circle");
+  setSelectedLoopId("");
+  setActiveTab("circleDetail");
+}
+
+function openLoop(circleId: string, loopId: string) {
+  setSelectedCircleId(circleId);
+  setSelectedLoopId(loopId);
+  setActiveTab("loops");
 }
 
 async function createCircle(newCircle: Circle) {
@@ -1387,7 +1413,7 @@ async function createCircle(newCircle: Circle) {
   setSelectedCircleId(sharedCircle.id);
   setSelectedPostIndex(0);
   setIsCreateCircleOpen(false);
-  setActiveTab("orbit");
+  setActiveTab("circleDetail");
 
   await saveCircleToFirestore(currentUser.id, sharedCircle);
 }
@@ -1507,7 +1533,7 @@ const expiresAtMs = createdAtMs + POST_EXPIRATION_MS;
 
   setSelectedPostIndex(0);
   setIsAddUpdateOpen(false);
-  setActiveTab("orbit");
+  setActiveTab("circleDetail");
 }
 
 function reactToPost(postId: string, emoji: string) {
@@ -1598,8 +1624,9 @@ function addLoopToCircle(loopItem: LoopItem) {
     loop: [loopItem, ...circle.loop],
   }));
 
+  setSelectedLoopId(loopItem.id);
   setIsCreateLoopOpen(false);
-  setActiveTab("orbit");
+  setActiveTab("loops");
 }
 
 function archiveLoop(loopId: string) {
@@ -1637,6 +1664,60 @@ function setLoopParticipation(
       return {
         ...item,
         participants: nextParticipants,
+      };
+    }),
+  }));
+}
+
+function voteOnLoopPollInCircle(
+  circleId: string,
+  loopId: string,
+  optionId: string,
+  personName: string
+) {
+  updateCircleLocallyAndInFirestore(circleId, (circle) => ({
+    ...circle,
+    loop: circle.loop.map((item) => {
+      if (item.id !== loopId || !item.poll) return item;
+
+      return {
+        ...item,
+        poll: {
+          ...item.poll,
+          options: item.poll.options.map((option) => {
+            const votesWithoutPerson = option.votes.filter(
+              (name) => name !== personName
+            );
+
+            if (option.id !== optionId) {
+              return {
+                ...option,
+                votes: votesWithoutPerson,
+              };
+            }
+
+            return {
+              ...option,
+              votes: [...votesWithoutPerson, personName],
+            };
+          }),
+        },
+      };
+    }),
+  }));
+}
+
+function toggleLoopTaskInCircle(circleId: string, loopId: string, taskId: string) {
+  updateCircleLocallyAndInFirestore(circleId, (circle) => ({
+    ...circle,
+    loop: circle.loop.map((item) => {
+      if (item.id !== loopId) return item;
+
+      return {
+        ...item,
+        tasks: item.tasks.map((task) =>
+          task.id === taskId ? { ...task, done: !task.done } : task
+        ),
       };
     }),
   }));
@@ -1990,17 +2071,27 @@ if (!currentUser) {
 
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(11rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
           {activeTab === "home" && (
-            <HomeView
-  circles={circles}
-  guestPassCount={guestPasses.length}
-  currentUser={currentUser}
-  onOpenCircle={openCircle}
-  selectedCircleId={selectedCircleId}
-  setSelectedCircleId={setSelectedCircleId}
-  onCreateCircle={() => setIsCreateCircleOpen(true)}
-  onOpenProfile={() => setIsProfileOpen(true)}
-/>
-          )}
+  <HomeView
+    circles={circles}
+    guestPassCount={guestPasses.length}
+    currentUser={currentUser}
+    onOpenCircle={openCircle}
+    selectedCircleId={selectedCircleId}
+    setSelectedCircleId={setSelectedCircleId}
+    onCreateCircle={() => setIsCreateCircleOpen(true)}
+    onOpenProfile={() => setIsProfileOpen(true)}
+    onViewAllCircles={() => setActiveTab("circles")}
+  />
+)}
+
+{activeTab === "circles" && (
+  <CirclesView
+    circles={circles}
+    selectedCircleId={selectedCircleId}
+    onOpenCircle={openCircle}
+    onCreateCircle={() => setIsCreateCircleOpen(true)}
+  />
+)}
 
 {activeTab === "orbit" && (
   <OrbitBriefView
@@ -2008,11 +2099,24 @@ if (!currentUser) {
     currentUser={currentUser}
     incomingRequests={incomingRequests}
     onOpenCircle={openCircle}
+    onOpenLoop={openLoop}
     onOpenPeople={() => setActiveTab("people")}
   />
 )}
 
-{activeTab === "circle" && selectedCircle && (
+{activeTab === "loops" && (
+  <LoopsDashboardView
+    circles={circles}
+    currentUser={currentUser}
+    selectedLoopId={selectedLoopId}
+    onOpenCircle={openCircle}
+    onOpenLoop={openLoop}
+    onVotePoll={voteOnLoopPollInCircle}
+    onToggleTask={toggleLoopTaskInCircle}
+  />
+)}
+
+{activeTab === "circleDetail" && selectedCircle && (
   <OrbitView
     circle={selectedCircle}
     selectedPostIndex={selectedPostIndex}
@@ -2030,7 +2134,7 @@ if (!currentUser) {
   />
 )}
 
-{activeTab === "circle" && !selectedCircle && (
+{activeTab === "circleDetail" && !selectedCircle && (
   <div className="rounded-[2.5rem] border border-white/10 bg-white/8 p-6 text-center shadow-xl shadow-black/20 backdrop-blur-2xl">
     <h2 className="text-2xl font-semibold">No Circle yet.</h2>
     <p className="mt-3 text-sm leading-6 text-white/55">
@@ -2819,23 +2923,38 @@ function Header({
   onOpenProfile: () => void;
   onOpenCircleSettings: () => void;
 }) {
-  const isCircleDetail = activeTab === "circle" && circle;
-  const isOrbitBrief = activeTab === "orbit";
+  const isCircleDetail = activeTab === "circleDetail" && circle;
+
+  const headerTitle =
+    isCircleDetail
+      ? circle.name
+      : activeTab === "orbit"
+        ? "Your Orbit"
+        : activeTab === "circles"
+          ? "Circles"
+          : activeTab === "loops"
+            ? "Loops"
+            : `Welcome ${getFirstName(currentUser.name)}`;
+
+  const headerEyebrow =
+    isCircleDetail
+      ? "Circle"
+      : activeTab === "orbit"
+        ? "Briefing"
+        : activeTab === "circles"
+          ? "Your groups"
+          : activeTab === "loops"
+            ? "Planning hub"
+            : "Home";
 
   return (
     <header className="relative z-10 px-5 pt-[calc(1rem+env(safe-area-inset-top))]">
       <div className="flex items-center justify-between">
         <div className="min-w-0">
-          <p className="text-sm text-white/45">
-            {isCircleDetail ? "Circle" : isOrbitBrief ? "Orbit" : "Home"}
-          </p>
+          <p className="text-sm text-white/45">{headerEyebrow}</p>
 
           <h1 className="truncate text-3xl font-semibold tracking-tight">
-            {isCircleDetail
-              ? circle.name
-              : isOrbitBrief
-                ? "Your Orbit"
-                : `Welcome ${getFirstName(currentUser.name)}`}
+            {headerTitle}
           </h1>
         </div>
 
@@ -2864,17 +2983,362 @@ function Header({
   );
 }
 
+function LoopsDashboardView({
+  circles,
+  currentUser,
+  selectedLoopId,
+  onOpenCircle,
+  onOpenLoop,
+  onVotePoll,
+  onToggleTask,
+}: {
+  circles: Circle[];
+  currentUser: CurrentUser;
+  selectedLoopId: string;
+  onOpenCircle: (circleId: string) => void;
+  onOpenLoop: (circleId: string, loopId: string) => void;
+  onVotePoll: (
+    circleId: string,
+    loopId: string,
+    optionId: string,
+    personName: string
+  ) => void;
+  onToggleTask: (circleId: string, loopId: string, taskId: string) => void;
+}) {
+  const [filter, setFilter] = useState<"All" | "This Week" | "Polls" | "Tasks">("All");
+
+  const allLoops = circles.flatMap((circle) =>
+    circle.loop
+      .filter((loop) => !loop.archived)
+      .map((loop) => ({
+        circle,
+        loop,
+      }))
+  );
+
+  const filteredLoops = allLoops
+    .filter(({ loop }) => {
+      if (filter === "This Week") return isLoopComingSoon(loop);
+      if (filter === "Polls") return Boolean(loop.poll);
+      if (filter === "Tasks") return loop.tasks.length > 0;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.loop.id === selectedLoopId) return -1;
+      if (b.loop.id === selectedLoopId) return 1;
+
+      const dateA = a.loop.timing.date || "9999-99-99";
+      const dateB = b.loop.timing.date || "9999-99-99";
+
+      return dateA.localeCompare(dateB);
+    });
+
+  return (
+    <div className="space-y-5">
+      <div className="px-1">
+        <h2 className="text-2xl font-semibold tracking-tight">Loops</h2>
+        <p className="mt-1 text-sm text-white/45">
+          Plans, polls, tasks, and decisions across your Circles.
+        </p>
+      </div>
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {(["All", "This Week", "Polls", "Tasks"] as const).map((item) => (
+          <button
+            key={item}
+            onClick={() => setFilter(item)}
+            className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold active:scale-95 ${
+              filter === item
+                ? "bg-white text-slate-950"
+                : "bg-white/8 text-white/55"
+            }`}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        {filteredLoops.map(({ circle, loop }) => {
+          const isSelected = loop.id === selectedLoopId;
+          const userVotes =
+            loop.poll?.options.flatMap((option) =>
+              option.votes.includes(currentUser.name) ? [option.id] : []
+            ) || [];
+
+          return (
+            <div
+              key={`${circle.id}-${loop.id}`}
+              className={`rounded-[2rem] border p-4 shadow-xl shadow-black/20 backdrop-blur-2xl ${
+                isSelected
+                  ? "border-cyan-200/40 bg-cyan-300/12"
+                  : "border-white/10 bg-white/8"
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-white/40">{circle.name}</p>
+                  <h3 className="mt-1 truncate text-xl font-semibold">
+                    {loop.title}
+                  </h3>
+                  <p className="mt-2 text-sm text-white/45">
+                    {getLoopTimingLabelForOrbit(loop.timing)}
+                  </p>
+                </div>
+
+                <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs text-white/55">
+                  {loop.type}
+                </span>
+              </div>
+
+              {loop.quickNote && (
+                <p className="mt-4 rounded-[1.5rem] bg-white/8 px-4 py-3 text-sm leading-6 text-white/55">
+                  {loop.quickNote}
+                </p>
+              )}
+
+              {loop.poll && (
+                <div className="mt-4 rounded-[1.5rem] bg-white/8 p-4">
+                  <p className="text-sm font-semibold">{loop.poll.question}</p>
+
+                  <div className="mt-3 space-y-2">
+                    {loop.poll.options.map((option) => {
+                      const selected = userVotes.includes(option.id);
+
+                      return (
+                        <button
+                          key={option.id}
+                          onClick={() =>
+                            onVotePoll(
+                              circle.id,
+                              loop.id,
+                              option.id,
+                              currentUser.name
+                            )
+                          }
+                          className={`flex w-full items-center justify-between rounded-full px-4 py-3 text-sm active:scale-[0.98] ${
+                            selected
+                              ? "bg-white text-slate-950"
+                              : "bg-white/10 text-white/65"
+                          }`}
+                        >
+                          <span>{option.label}</span>
+                          <span>{option.votes.length}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {loop.tasks.length > 0 && (
+                <div className="mt-4 rounded-[1.5rem] bg-white/8 p-4">
+                  <p className="text-sm font-semibold">Tasks</p>
+
+                  <div className="mt-3 space-y-2">
+                    {loop.tasks.map((task) => (
+                      <button
+                        key={task.id}
+                        onClick={() => onToggleTask(circle.id, loop.id, task.id)}
+                        className="flex w-full items-center justify-between gap-3 rounded-[1.25rem] bg-white/8 px-4 py-3 text-left active:scale-[0.98]"
+                      >
+                        <div className="min-w-0">
+                          <p
+                            className={`truncate text-sm ${
+                              task.done ? "text-white/35 line-through" : "text-white/75"
+                            }`}
+                          >
+                            {task.title}
+                          </p>
+                          <p className="mt-1 text-xs text-white/35">
+                            Owner: {task.owner}
+                          </p>
+                        </div>
+
+                        <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs text-white/55">
+                          {task.done ? "Done" : "Open"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => onOpenLoop(circle.id, loop.id)}
+                  className="rounded-full bg-white/10 px-4 py-3 text-sm font-semibold text-white/65 active:scale-[0.98]"
+                >
+                  Focus Loop
+                </button>
+
+                <button
+                  onClick={() => onOpenCircle(circle.id)}
+                  className="rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950 active:scale-[0.98]"
+                >
+                  Open Circle
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {filteredLoops.length === 0 && (
+          <div className="rounded-[2rem] border border-white/10 bg-white/8 p-5 text-center">
+            <h3 className="text-xl font-semibold">No Loops here.</h3>
+            <p className="mt-2 text-sm leading-6 text-white/45">
+              Create a Loop inside a Circle to start planning.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CirclesView({
+  circles,
+  selectedCircleId,
+  onOpenCircle,
+  onCreateCircle,
+}: {
+  circles: Circle[];
+  selectedCircleId: string;
+  onOpenCircle: (circleId: string) => void;
+  onCreateCircle: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState<"All" | "Active" | "Loops" | "Quiet">("All");
+
+  const filteredCircles = circles.filter((circle) => {
+    const matchesSearch = circle.name
+      .toLowerCase()
+      .includes(search.trim().toLowerCase());
+
+    const activePosts = getActivePosts(circle);
+    const activeLoops = circle.loop.filter((item) => !item.archived);
+
+    const matchesFilter =
+      filter === "All" ||
+      (filter === "Active" && activePosts.length > 0) ||
+      (filter === "Loops" && activeLoops.length > 0) ||
+      (filter === "Quiet" && activePosts.length === 0 && activeLoops.length === 0);
+
+    return matchesSearch && matchesFilter;
+  });
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between px-1">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">Circles</h2>
+          <p className="mt-1 text-sm text-white/45">
+            Find and open the groups you run in.
+          </p>
+        </div>
+
+        <button
+          onClick={onCreateCircle}
+          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 active:scale-95"
+        >
+          Create
+        </button>
+      </div>
+
+      <input
+        value={search}
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search Circles"
+        className="w-full rounded-full border border-white/10 bg-white/10 px-5 py-4 text-white outline-none placeholder:text-white/30 focus:border-white/30"
+      />
+
+      <div className="flex gap-2 overflow-x-auto pb-1">
+        {(["All", "Active", "Loops", "Quiet"] as const).map((item) => (
+          <button
+            key={item}
+            onClick={() => setFilter(item)}
+            className={`shrink-0 rounded-full px-4 py-3 text-sm font-semibold active:scale-95 ${
+              filter === item
+                ? "bg-white text-slate-950"
+                : "bg-white/8 text-white/55"
+            }`}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+
+      <div className="space-y-3">
+        {filteredCircles.map((circle) => {
+          const activePosts = getActivePosts(circle);
+          const activeLoops = circle.loop.filter((item) => !item.archived);
+          const hasActivity = activePosts.length > 0 || activeLoops.length > 0;
+
+          return (
+            <button
+              key={circle.id}
+              onClick={() => onOpenCircle(circle.id)}
+              className={`w-full rounded-[2rem] border p-4 text-left shadow-xl backdrop-blur-2xl transition active:scale-[0.98] ${
+                selectedCircleId === circle.id
+                  ? "border-white/25 bg-white/14 shadow-black/25"
+                  : hasActivity
+                    ? "border-cyan-200/25 bg-cyan-300/10 shadow-cyan-950/30"
+                    : "border-white/10 bg-white/8 shadow-black/25"
+              }`}
+            >
+              <div className="flex items-center gap-4">
+                <CircleVisual circle={circle} size="md" />
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <h3 className="truncate text-lg font-semibold">
+                      {circle.name}
+                    </h3>
+
+                    {hasActivity && (
+                      <span className="grid h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-200 shadow-lg shadow-cyan-300/40" />
+                    )}
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/45">
+                    <span>{activePosts.length} active posts</span>
+                    <span>•</span>
+                    <span>{activeLoops.length} active Loops</span>
+                    <span>•</span>
+                    <span>{circle.members.length}/8 people</span>
+                  </div>
+                </div>
+              </div>
+            </button>
+          );
+        })}
+
+        {filteredCircles.length === 0 && (
+          <div className="rounded-[2rem] border border-white/10 bg-white/8 p-5 text-center">
+            <h3 className="text-xl font-semibold">No Circles found.</h3>
+            <p className="mt-2 text-sm leading-6 text-white/45">
+              Try a different search or filter.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function OrbitBriefView({
   circles,
   currentUser,
   incomingRequests,
   onOpenCircle,
+  onOpenLoop,
   onOpenPeople,
 }: {
   circles: Circle[];
   currentUser: CurrentUser;
   incomingRequests: FriendRequest[];
   onOpenCircle: (circleId: string) => void;
+  onOpenLoop: (circleId: string, loopId: string) => void;
   onOpenPeople: () => void;
 }) {
   const orbitBrief = useMemo(
@@ -2900,15 +3364,20 @@ function OrbitBriefView({
                   : "from-slate-200 via-slate-400 to-slate-800";
 
   function handleNeedClick(need: OrbitNeed) {
-    if (need.circleId) {
-      onOpenCircle(need.circleId);
-      return;
-    }
-
-    if (need.type === "Invite") {
-      onOpenPeople();
-    }
+  if (need.destination === "loops" && need.circleId && need.loopId) {
+    onOpenLoop(need.circleId, need.loopId);
+    return;
   }
+
+  if (need.destination === "circle" && need.circleId) {
+    onOpenCircle(need.circleId);
+    return;
+  }
+
+  if (need.destination === "people") {
+    onOpenPeople();
+  }
+}
 
   return (
     <div className="space-y-5">
@@ -2966,14 +3435,35 @@ function OrbitBriefView({
           {orbitBrief.nextMoveDetail}
         </p>
 
-        {orbitBrief.nextMoveCircleId && (
-          <button
-            onClick={() => onOpenCircle(orbitBrief.nextMoveCircleId!)}
-            className="mt-4 w-full rounded-full bg-white px-5 py-4 text-sm font-semibold text-slate-950 active:scale-[0.98]"
-          >
-            Go there
-          </button>
-        )}
+        {orbitBrief.nextMoveDestination && (
+  <button
+    onClick={() => {
+      if (
+        orbitBrief.nextMoveDestination === "loops" &&
+        orbitBrief.nextMoveCircleId &&
+        orbitBrief.nextMoveLoopId
+      ) {
+        onOpenLoop(orbitBrief.nextMoveCircleId, orbitBrief.nextMoveLoopId);
+        return;
+      }
+
+      if (
+        orbitBrief.nextMoveDestination === "circle" &&
+        orbitBrief.nextMoveCircleId
+      ) {
+        onOpenCircle(orbitBrief.nextMoveCircleId);
+        return;
+      }
+
+      if (orbitBrief.nextMoveDestination === "people") {
+        onOpenPeople();
+      }
+    }}
+    className="mt-4 w-full rounded-full bg-white px-5 py-4 text-sm font-semibold text-slate-950 active:scale-[0.98]"
+  >
+    Go there
+  </button>
+)}
       </div>
 
       {orbitBrief.needs.length > 0 && (
@@ -3087,6 +3577,7 @@ function HomeView({
   selectedCircleId,
   onCreateCircle,
   onOpenProfile,
+  onViewAllCircles,
 }: {
   circles: Circle[];
   guestPassCount: number;
@@ -3096,6 +3587,7 @@ function HomeView({
   setSelectedCircleId: (circleId: string) => void;
   onCreateCircle: () => void;
   onOpenProfile: () => void;
+  onViewAllCircles: () => void;
 }) {
   const visibleCircles = circles.slice(0, 3);
   const comingSoonLoops = getComingSoonLoops(circles);
@@ -3182,11 +3674,14 @@ function HomeView({
             );
           })}
 
-          {circles.length > 3 && (
-            <button className="w-full rounded-full border border-white/10 bg-white/8 px-5 py-4 text-sm font-semibold text-white/65 active:scale-[0.98]">
-              View all Circles
-            </button>
-          )}
+{circles.length > 3 && (
+  <button
+    onClick={onViewAllCircles}
+    className="w-full rounded-full border border-white/10 bg-white/8 px-5 py-4 text-sm font-semibold text-white/65 active:scale-[0.98]"
+  >
+    View all Circles
+  </button>
+)}
         </div>
       )}
 
@@ -6326,23 +6821,25 @@ function BottomNav({
 }) {
   const tabs: { id: ActiveTab; label: string }[] = [
     { id: "home", label: "Home" },
+    { id: "circles", label: "Circles" },
     { id: "orbit", label: "Orbit" },
+    { id: "loops", label: "Loops" },
     { id: "people", label: "People" },
   ];
 
   return (
-    <nav className="absolute bottom-5 left-5 right-5 z-50 rounded-full border border-white/10 bg-white/12 p-2 shadow-2xl shadow-black/40 backdrop-blur-2xl">
-      <div className="grid grid-cols-3 gap-2">
+    <nav className="absolute bottom-5 left-3 right-3 z-50 rounded-full border border-white/10 bg-white/12 p-2 shadow-2xl shadow-black/40 backdrop-blur-2xl">
+      <div className="grid grid-cols-5 gap-1">
         {tabs.map((tab) => {
           const isActive =
             activeTab === tab.id ||
-            (tab.id === "orbit" && activeTab === "circle");
+            (tab.id === "circles" && activeTab === "circleDetail");
 
           return (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`relative rounded-full px-3 py-3 text-sm font-medium transition active:scale-95 ${
+              className={`relative rounded-full px-2 py-3 text-[11px] font-semibold transition active:scale-95 ${
                 isActive ? "bg-white text-slate-950 shadow-lg" : "text-white/55"
               }`}
             >
