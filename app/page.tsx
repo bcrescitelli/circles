@@ -58,6 +58,7 @@ type CurrentUser = {
   email: string;
   initials: string;
   avatarColor: string;
+  avatarUrl?: string;
   status?: string;
 };
 
@@ -68,6 +69,7 @@ type Person = {
   color: string;
   status: ContactStatus;
   email?: string;
+  avatarUrl?: string;
 };
 
 type FirestorePerson = Person & {
@@ -122,14 +124,18 @@ type Post = {
   personName: string;
   personInitials: string;
   personColor: string;
+  personAvatarUrl?: string;
   caption: string;
   time: string;
   mood: string;
   gradient: string;
   prompt: string;
   photoUrl?: string;
+  createdAtMs: number;
+  expiresAtMs: number;
   reactions?: PostReaction[];
   replies?: PostReply[];
+  reportedBy?: string[];
 };
 
 type LoopType = "Plan" | "Trip" | "Event" | "Decision" | "Check In";
@@ -373,8 +379,91 @@ function getCircleAttentionLabel(score: number) {
   return "";
 }
 
+const POST_EXPIRATION_HOURS = 24;
+const POST_EXPIRATION_MS = POST_EXPIRATION_HOURS * 60 * 60 * 1000;
+
+function getFirstName(name: string) {
+  return name.trim().split(" ")[0] || "there";
+}
+
+function getActivePosts(circle: Circle) {
+  const now = Date.now();
+
+  return circle.posts.filter((post) => {
+    if (!post.expiresAtMs) return true;
+    return post.expiresAtMs > now;
+  });
+}
+
+function getPostExpirationLabel(post: Post) {
+  if (!post.expiresAtMs) return "Expires soon";
+
+  const remainingMs = post.expiresAtMs - Date.now();
+
+  if (remainingMs <= 0) return "Expired";
+
+  const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+
+  if (remainingHours <= 1) return "Expires in 1 hour";
+
+  return `Expires in ${remainingHours} hours`;
+}
+
+function isLoopComingSoon(loop: LoopItem) {
+  if (loop.archived || !loop.timing.date) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const sevenDaysFromNow = new Date(today);
+  sevenDaysFromNow.setDate(today.getDate() + 7);
+
+  const loopDate = new Date(`${loop.timing.date}T00:00:00`);
+
+  return loopDate >= today && loopDate <= sevenDaysFromNow;
+}
+
+function getComingSoonLoops(circles: Circle[]) {
+  return circles
+    .flatMap((circle) =>
+      circle.loop
+        .filter(isLoopComingSoon)
+        .filter((loop) => loop.participants.in.length > 0)
+        .map((loop) => ({
+          ...loop,
+          circleName: circle.name,
+          circleId: circle.id,
+        }))
+    )
+    .sort((a, b) => {
+      const dateA = a.timing.date || "";
+      const dateB = b.timing.date || "";
+      return dateA.localeCompare(dateB);
+    })
+    .slice(0, 3);
+}
+
 function Avatar({ person, size = "md" }: { person: Person; size?: "sm" | "md" | "lg" }) {
-  const sizeClass = size === "sm" ? "h-9 w-9 text-xs" : size === "lg" ? "h-16 w-16 text-lg" : "h-11 w-11 text-sm";
+  const sizeClass =
+    size === "sm"
+      ? "h-9 w-9 text-xs"
+      : size === "lg"
+        ? "h-16 w-16 text-lg"
+        : "h-11 w-11 text-sm";
+
+  if (person.avatarUrl) {
+    return (
+      <div
+        className={`relative ${sizeClass} shrink-0 overflow-hidden rounded-full shadow-lg shadow-black/30 ring-2 ring-white/20`}
+      >
+        <img
+          src={person.avatarUrl}
+          alt={person.name}
+          className="h-full w-full object-cover"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className={`grid ${sizeClass} shrink-0 place-items-center rounded-full bg-gradient-to-br ${person.color} font-bold text-slate-950 shadow-lg shadow-black/30 ring-2 ring-white/20`}>
@@ -472,6 +561,7 @@ function userToCurrentUser(user: User): CurrentUser {
     email: user.email || "",
     initials: getInitials(displayName) || "ME",
     avatarColor: avatarColors[0],
+    avatarUrl: "",
     status: "",
   };
 }
@@ -493,6 +583,7 @@ async function createUserProfileDoc(user: User, name: string, email: string) {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
       avatarColor: avatarColors[0],
+     avatarUrl: "",
       status: "",
     },
     { merge: true }
@@ -530,6 +621,10 @@ async function loadCurrentUserProfile(user: User): Promise<CurrentUser> {
       typeof data.avatarColor === "string" && data.avatarColor.trim()
         ? data.avatarColor
         : avatarColors[0],
+    avatarUrl:
+      typeof data.avatarUrl === "string"
+       ? data.avatarUrl
+       : "",
     status:
       typeof data.status === "string"
         ? data.status
@@ -545,6 +640,7 @@ function cleanPersonFromFirestore(data: FirestorePerson): Person {
     color: data.color,
     status: data.status,
     email: data.email,
+    avatarUrl: data.avatarUrl,
   };
 }
 
@@ -875,13 +971,14 @@ async function createCircle(newCircle: Circle) {
   if (!currentUser) return;
 
   const currentUserAsPerson: Person = {
-    id: currentUser.id,
-    name: currentUser.name,
-    initials: currentUser.initials,
-    color: currentUser.avatarColor || "from-white to-slate-300",
-    status: "Friend",
-    email: currentUser.email,
-  };
+  id: currentUser.id,
+  name: currentUser.name,
+  initials: currentUser.initials,
+  color: currentUser.avatarColor || "from-white to-slate-300",
+  status: "Friend",
+  email: currentUser.email,
+  avatarUrl: currentUser.avatarUrl,
+};
 
   const uniqueMembers = [
     currentUserAsPerson,
@@ -952,6 +1049,20 @@ async function leaveCircle(circleId: string) {
   }
 }
 
+async function uploadAvatarPhoto(file: File) {
+  if (!currentUser) {
+    throw new Error("You need to be signed in to upload an avatar.");
+  }
+
+  const safeFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "-");
+  const filePath = `users/${currentUser.id}/profile/${Date.now()}-${safeFileName}`;
+  const storageRef = ref(storage, filePath);
+
+  await uploadBytes(storageRef, file);
+
+  return getDownloadURL(storageRef);
+}
+
 async function uploadPostPhoto(circleId: string, file: File) {
   if (!currentUser) {
     throw new Error("You need to be signed in to upload a photo.");
@@ -975,17 +1086,23 @@ async function addPostToCircle(caption: string, mood: string, photoFile?: File) 
     uploadedPhotoUrl = await uploadPostPhoto(selectedCircleId, photoFile);
   }
 
+const createdAtMs = Date.now();
+const expiresAtMs = createdAtMs + POST_EXPIRATION_MS;
+
   const newPost: Post = {
     id: `post-${Date.now()}`,
     personId: currentUser.id,
     personName: currentUser.name,
     personInitials: currentUser.initials,
     personColor: currentUser.avatarColor || getStableColorFromString(currentUser.id),
+    personAvatarUrl: currentUser.avatarUrl,
     caption,
     time: "Just now",
     mood,
     prompt: selectedCircle?.dailyPrompt || "What is your energy today?",
     photoUrl: uploadedPhotoUrl,
+    createdAtMs,
+    expiresAtMs,
     gradient: getPostGradientForUser(currentUser.id),
     reactions: [],
     replies: [],
@@ -1263,6 +1380,19 @@ async function addPersonToPeople(
   });
 }
 
+async function removeFriend(personId: string) {
+  if (!currentUser) return;
+
+  setContacts((currentContacts) =>
+    currentContacts.filter((person) => person.id !== personId)
+  );
+
+  await updateDoc(doc(db, "users", currentUser.id, "people", personId), {
+    status: "Suggested",
+    updatedAt: serverTimestamp(),
+  });
+}
+
 async function updatePersonStatus(personId: string, status: ContactStatus) {
   setContacts((currentContacts) =>
     currentContacts.map((person) =>
@@ -1288,6 +1418,7 @@ async function acceptFriendRequest(request: FriendRequest) {
     initials: getInitials(request.fromName) || "??",
     color: "from-cyan-300 to-blue-500",
     status: "Friend",
+    avatarUrl: currentUser.avatarUrl,
   };
 
   await savePersonToFirestore(currentUser.id, requesterAsPerson);
@@ -1363,6 +1494,7 @@ setCurrentUser({
   email: credential.user.email || email.trim(),
   initials: getInitials(name.trim()) || "ME",
   avatarColor: avatarColors[0],
+  avatarUrl: "",
   status: "",
 });
 
@@ -1388,11 +1520,17 @@ async function handleUpdateProfile(profile: {
   name: string;
   avatarColor: string;
   status: string;
+  avatarFile?: File;
 }) {
   if (!currentUser || !firebaseAuth.currentUser) return;
 
   const nextName = profile.name.trim() || currentUser.name;
   const nextInitials = getInitials(nextName) || currentUser.initials;
+  let nextAvatarUrl = currentUser.avatarUrl || "";
+
+if (profile.avatarFile) {
+  nextAvatarUrl = await uploadAvatarPhoto(profile.avatarFile);
+}
 
   await updateProfile(firebaseAuth.currentUser, {
     displayName: nextName,
@@ -1404,6 +1542,7 @@ async function handleUpdateProfile(profile: {
       name: nextName,
       initials: nextInitials,
       avatarColor: profile.avatarColor,
+      avatarUrl: nextAvatarUrl,
       status: profile.status.trim(),
       updatedAt: serverTimestamp(),
     },
@@ -1415,6 +1554,7 @@ async function handleUpdateProfile(profile: {
     name: nextName,
     initials: nextInitials,
     avatarColor: profile.avatarColor,
+    avatarUrl: nextAvatarUrl,
     status: profile.status.trim(),
   });
 }
@@ -1447,8 +1587,14 @@ if (!currentUser) {
 <div className="pointer-events-none fixed inset-0 backdrop-blur-3xl" />
 
       <section className="relative mx-auto flex h-dvh w-full max-w-[430px] flex-col overflow-hidden border-x border-white/10 bg-slate-950/55 shadow-2xl shadow-black">
-        {activeTab !== "people" && selectedCircle && (
-  <Header circle={selectedCircle} activeTab={activeTab} />
+        {activeTab !== "people" && (
+  <Header
+    circle={selectedCircle}
+    activeTab={activeTab}
+    currentUser={currentUser}
+    onOpenProfile={() => setIsProfileOpen(true)}
+    onOpenCircleSettings={() => setIsCircleSettingsOpen(true)}
+  />
 )}
 
         <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-4 pb-[calc(11rem+env(safe-area-inset-bottom))] pt-3 [-webkit-overflow-scrolling:touch]">
@@ -1504,6 +1650,7 @@ if (!currentUser) {
   incomingRequests={incomingRequests}
   onOpenAddPerson={() => setIsAddPersonOpen(true)}
   onUpdatePersonStatus={updatePersonStatus}
+  onRemoveFriend={removeFriend}
   onAcceptFriendRequest={acceptFriendRequest}
   onIgnoreFriendRequest={ignoreFriendRequest}
 />
@@ -1652,13 +1799,14 @@ function CircleSettingsModal({
     if (!canSave) return;
 
     const currentUserAsPerson: Person = {
-      id: currentUser.id,
-      name: currentUser.name,
-      initials: currentUser.initials,
-      color: currentUser.avatarColor,
-      status: "Friend",
-      email: currentUser.email,
-    };
+  id: currentUser.id,
+  name: currentUser.name,
+  initials: currentUser.initials,
+  color: currentUser.avatarColor,
+  status: "Friend",
+  email: currentUser.email,
+  avatarUrl: currentUser.avatarUrl,
+};
 
     const nextMembers = [
       currentUserAsPerson,
@@ -1864,10 +2012,11 @@ function ProfileModal({
   currentUser: CurrentUser;
   onClose: () => void;
   onUpdateProfile: (profile: {
-    name: string;
-    avatarColor: string;
-    status: string;
-  }) => Promise<void>;
+  name: string;
+  avatarColor: string;
+  status: string;
+  avatarFile?: File;
+}) => Promise<void>;
   onChangePassword: (newPassword: string) => Promise<void>;
   onSignOut: () => void;
 }) {
@@ -1880,9 +2029,19 @@ function ProfileModal({
   const [error, setError] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(currentUser.avatarUrl || "");
+const [avatarFile, setAvatarFile] = useState<File | undefined>();
 
   const passwordReady =
     newPassword.length >= 6 && newPassword === confirmPassword;
+
+    function handleAvatarSelect(event: ChangeEvent<HTMLInputElement>) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+
+  setAvatarFile(file);
+  setAvatarPreviewUrl(URL.createObjectURL(file));
+}
 
   async function saveProfile() {
     setError("");
@@ -1894,6 +2053,7 @@ function ProfileModal({
         name,
         avatarColor,
         status,
+        avatarFile,
       });
 
       setMessage("Profile updated.");
@@ -1955,11 +2115,32 @@ function ProfileModal({
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 [-webkit-overflow-scrolling:touch]">
           <div className="rounded-[2rem] border border-white/10 bg-white/8 p-4">
             <div className="flex items-center gap-4">
-              <div
-                className={`grid h-20 w-20 place-items-center rounded-full bg-gradient-to-br ${avatarColor} text-xl font-black text-slate-950 shadow-xl shadow-black/30 ring-2 ring-white/20`}
-              >
-                {getInitials(name) || currentUser.initials}
-              </div>
+              <label className="relative grid h-20 w-20 cursor-pointer place-items-center overflow-hidden rounded-full shadow-xl shadow-black/30 ring-2 ring-white/20 active:scale-95">
+  {avatarPreviewUrl ? (
+    <img
+      src={avatarPreviewUrl}
+      alt="Profile avatar"
+      className="h-full w-full object-cover"
+    />
+  ) : (
+    <div
+      className={`grid h-full w-full place-items-center bg-gradient-to-br ${avatarColor} text-xl font-black text-slate-950`}
+    >
+      {getInitials(name) || currentUser.initials}
+    </div>
+  )}
+
+  <input
+    type="file"
+    accept="image/*"
+    onChange={handleAvatarSelect}
+    className="hidden"
+  />
+
+  <div className="absolute inset-x-0 bottom-0 bg-slate-950/65 py-1 text-center text-[10px] font-semibold text-white">
+    Edit
+  </div>
+</label>
 
               <div className="min-w-0">
                 <p className="truncate text-lg font-semibold">{name}</p>
@@ -2224,15 +2405,53 @@ function AuthScreen({
   );
 }
 
-function Header({ circle, activeTab }: { circle: Circle; activeTab: string }) {
+function Header({
+  circle,
+  activeTab,
+  currentUser,
+  onOpenProfile,
+  onOpenCircleSettings,
+}: {
+  circle: Circle | null;
+  activeTab: string;
+  currentUser: CurrentUser;
+  onOpenProfile: () => void;
+  onOpenCircleSettings: () => void;
+}) {
+  const isOrbit = activeTab === "orbit" && circle;
+
   return (
-    <header className="relative z-10 px-5 pt-7">
-      <div className="flex items-center justify-between rounded-full border border-white/10 bg-white/8 px-4 py-3 shadow-xl shadow-black/20 backdrop-blur-2xl">
-        <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-white/45">{activeTab === "home" ? "Circles" : circle.type}</p>
-          <h1 className="text-xl font-semibold tracking-tight">{activeTab === "home" ? "Your Orbits" : circle.name}</h1>
+    <header className="relative z-10 px-5 pt-[calc(1rem+env(safe-area-inset-top))]">
+      <div className="flex items-center justify-between">
+        <div className="min-w-0">
+          <p className="text-sm text-white/45">
+            {isOrbit ? "Circle" : "Home"}
+          </p>
+          <h1 className="truncate text-3xl font-semibold tracking-tight">
+            {isOrbit ? circle.name : `Welcome ${getFirstName(currentUser.name)}`}
+          </h1>
         </div>
-        <PulseBadge pulse={circle.pulse} />
+
+        {isOrbit ? (
+          <button onClick={onOpenCircleSettings} className="active:scale-95">
+            <CircleVisual circle={circle} size="sm" />
+          </button>
+        ) : (
+          <button
+            onClick={onOpenProfile}
+            className="grid h-12 w-12 shrink-0 place-items-center overflow-hidden rounded-full bg-white/10 text-sm font-black text-white ring-2 ring-white/15 active:scale-95"
+          >
+            {currentUser.avatarUrl ? (
+              <img
+                src={currentUser.avatarUrl}
+                alt={currentUser.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              currentUser.initials
+            )}
+          </button>
+        )}
       </div>
     </header>
   );
@@ -2240,11 +2459,9 @@ function Header({ circle, activeTab }: { circle: Circle; activeTab: string }) {
 
 function HomeView({
   circles,
-  guestPassCount,
   currentUser,
   onOpenCircle,
   selectedCircleId,
-  setSelectedCircleId,
   onCreateCircle,
   onOpenProfile,
 }: {
@@ -2257,163 +2474,131 @@ function HomeView({
   onCreateCircle: () => void;
   onOpenProfile: () => void;
 }) {
-  const overlapInsight = useMemo(() => {
-    const counts = new Map<string, { person: Person; count: number }>();
-
-    circles.forEach((circle) => {
-      circle.members.forEach((person) => {
-        if (person.id === "brandon") return;
-        const existing = counts.get(person.id);
-        counts.set(person.id, {
-          person,
-          count: existing ? existing.count + 1 : 1,
-        });
-      });
-    });
-
-    return Array.from(counts.values())
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
-  }, [circles]);
+  const visibleCircles = circles.slice(0, 3);
+  const comingSoonLoops = getComingSoonLoops(circles);
 
   return (
     <div className="space-y-5">
-     <div className="rounded-[2.5rem] border border-white/10 bg-white/8 p-5 shadow-xl shadow-black/20 backdrop-blur-2xl">
-<div className="flex items-center justify-between gap-3">
-  <div className="flex min-w-0 items-center gap-3">
-    <button
-      onClick={onOpenProfile}
-      className={`grid h-12 w-12 shrink-0 place-items-center rounded-full bg-gradient-to-br ${currentUser.avatarColor} text-sm font-black text-slate-950 shadow-lg shadow-black/25 ring-2 ring-white/20 active:scale-95`}
-    >
-      {currentUser.initials}
-    </button>
-
-    <div className="min-w-0">
-      <p className="truncate text-sm font-semibold">{currentUser.name}</p>
-      <p className="truncate text-xs text-white/45">
-        {currentUser.status || currentUser.email}
-      </p>
-    </div>
-  </div>
-
-  <button
-    onClick={onOpenProfile}
-    className="rounded-full bg-white/10 px-4 py-2 text-xs font-semibold text-white/60 active:scale-95"
-  >
-    Profile
-  </button>
-</div>
-
-  <p className="mt-6 text-sm text-white/60">Today</p>
-  <h2 className="mt-1 text-[2rem] font-semibold leading-tight tracking-tight">Stay close. Stay in the loop.</h2>
-        <p className="mt-3 text-[15px] leading-6 text-white/60">
-          Your Circles are small private spaces for daily moments, shared plans, and trusted intros.
-        </p>
-        <p className="mt-3 text-xs text-white/45">
-  {guestPassCount} active {guestPassCount === 1 ? "Guest Pass" : "Guest Passes"}
-</p>
+      <div className="flex items-center justify-between px-1">
+        <h2 className="text-lg font-semibold tracking-tight">Your Circles</h2>
 
         <button
           onClick={onCreateCircle}
-          className="mt-5 w-full rounded-full bg-white px-5 py-4 font-semibold text-slate-950 shadow-xl shadow-black/20 active:scale-[0.98]"
+          className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-slate-950 active:scale-95"
         >
-          Create a Circle
+          Create
         </button>
       </div>
 
-      <div className="grid gap-4">
-        {circles.map((circle) => {
-  const attentionScore = getCircleAttentionScore(circle);
-  const attentionLabel = getCircleAttentionLabel(attentionScore);
-  const hasAttention = attentionScore > 0;
-
-  return (
-    <button
-      key={circle.id}
-            onClick={() => {
-              setSelectedCircleId(circle.id);
-              onOpenCircle(circle.id);
-            }}
-            className={`group rounded-[2rem] border p-4 text-left shadow-xl backdrop-blur-2xl transition active:scale-[0.98] ${
-  selectedCircleId === circle.id
-    ? "border-white/25 bg-white/14 shadow-black/25"
-    : hasAttention
-      ? "border-cyan-200/30 bg-cyan-300/10 shadow-cyan-950/30"
-      : "border-white/10 bg-white/8 shadow-black/25"
-}`}
+      {visibleCircles.length === 0 ? (
+        <div className="rounded-[2.25rem] border border-white/10 bg-white/8 p-5 text-center shadow-xl shadow-black/20 backdrop-blur-2xl">
+          <h3 className="text-xl font-semibold">No Circles yet.</h3>
+          <p className="mt-2 text-sm leading-6 text-white/45">
+            Create a small private space for your people.
+          </p>
+          <button
+            onClick={onCreateCircle}
+            className="mt-5 w-full rounded-full bg-white px-5 py-4 font-semibold text-slate-950 active:scale-[0.98]"
           >
-            <div className="grid grid-cols-[4rem_1fr] gap-4">
-              <div
-  className={`transition-transform ${
-    attentionScore >= 12
-      ? "scale-110"
-      : attentionScore >= 6
-        ? "scale-105"
-        : ""
-  }`}
->
-  <CircleVisual circle={circle} size="md" />
-</div>
-
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <h3
-  className={`truncate text-lg font-semibold ${
-    hasAttention ? "text-cyan-50" : ""
-  }`}
->
-  {circle.name}
-</h3>
-                  {circle.guest && <span className="rounded-full border border-dashed border-white/30 px-2 py-0.5 text-[10px] text-white/70">Guest</span>}
-                </div>
-                <p className="mt-1 text-sm text-white/50">{circle.type}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-  <PulseBadge pulse={circle.pulse} />
-  {hasAttention && (
-  <span className="rounded-full bg-cyan-200 px-3 py-1 text-xs font-semibold text-slate-950">
-    {attentionLabel}
-  </span>
-)}
-  <span className="rounded-full bg-white/8 px-3 py-1 text-xs text-white/45">
-    {circle.posts.length} posts
-  </span>
-  <span className="rounded-full bg-white/8 px-3 py-1 text-xs text-white/45">
-    {circle.loop.length} Loops
-  </span>
-</div>
-                <div className="mt-3 flex items-center gap-2">
-                  <div className="flex -space-x-2">
-                    {circle.members.slice(0, 5).map((person) => (
-                      <Avatar key={person.id} person={person} size="sm" />
-                    ))}
-                  </div>
-                  <p className="text-xs text-white/55">{circle.members.length}/8 people</p>
-                </div>
-              </div>
-            </div>
+            Create a Circle
           </button>
-          );
-        })}
-      </div>
-
-      <div className="rounded-[2rem] border border-white/10 bg-white/8 p-4 backdrop-blur-2xl">
-        <h3 className="text-sm font-semibold text-white/80">Closest overlaps</h3>
-        <p className="mt-1 text-xs text-white/45">Based on how many Circles you share.</p>
-        <div className="mt-4 space-y-3">
-          {overlapInsight.map((item) => (
-            <div key={item.person.id} className="flex items-center justify-between rounded-full bg-white/8 p-2 pr-4">
-              <div className="flex items-center gap-3">
-                <Avatar person={item.person} size="sm" />
-                <span className="text-sm">{item.person.name}</span>
-              </div>
-              <span className="text-xs text-white/50">{item.count} shared Circles</span>
-            </div>
-          ))}
         </div>
-      </div>
+      ) : (
+        <div className="space-y-3">
+          {visibleCircles.map((circle) => {
+            const activePosts = getActivePosts(circle);
+            const activeLoops = circle.loop.filter((item) => !item.archived);
+            const hasNewActivity = activePosts.length > 0 || activeLoops.length > 0;
+
+            return (
+              <button
+                key={circle.id}
+                onClick={() => onOpenCircle(circle.id)}
+                className={`w-full rounded-[2rem] border p-4 text-left shadow-xl backdrop-blur-2xl transition active:scale-[0.98] ${
+                  selectedCircleId === circle.id
+                    ? "border-white/25 bg-white/14 shadow-black/25"
+                    : hasNewActivity
+                      ? "border-cyan-200/25 bg-cyan-300/10 shadow-cyan-950/30"
+                      : "border-white/10 bg-white/8 shadow-black/25"
+                }`}
+              >
+                <div className="flex items-center gap-4">
+                  <CircleVisual circle={circle} size="md" />
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <h3 className="truncate text-lg font-semibold">
+                        {circle.name}
+                      </h3>
+
+                      {hasNewActivity && (
+                        <span className="grid h-2.5 w-2.5 shrink-0 place-items-center rounded-full bg-cyan-200 shadow-lg shadow-cyan-300/40" />
+                      )}
+                    </div>
+
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-white/45">
+                      <span>{activeLoops.length} active Loops</span>
+                      <span>•</span>
+                      <span>{circle.members.length}/8 people</span>
+                    </div>
+
+                    <div className="mt-3 flex items-center">
+                      {circle.members.slice(0, 5).map((person, index) => (
+                        <div
+                          key={person.id}
+                          className="-ml-2 first:ml-0"
+                          style={{ zIndex: 10 - index }}
+                        >
+                          <Avatar person={person} size="sm" />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+
+          {circles.length > 3 && (
+            <button className="w-full rounded-full border border-white/10 bg-white/8 px-5 py-4 text-sm font-semibold text-white/65 active:scale-[0.98]">
+              View all Circles
+            </button>
+          )}
+        </div>
+      )}
+
+      {comingSoonLoops.length > 0 && (
+        <div className="space-y-3">
+          <div className="px-1">
+            <h2 className="text-lg font-semibold tracking-tight">Coming Soon</h2>
+          </div>
+
+          <div className="space-y-2">
+            {comingSoonLoops.map((loop) => (
+              <button
+                key={`${loop.circleId}-${loop.id}`}
+                onClick={() => onOpenCircle(loop.circleId)}
+                className="flex w-full items-center justify-between rounded-[1.5rem] border border-white/10 bg-white/8 px-4 py-3 text-left active:scale-[0.98]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold">{loop.title}</p>
+                  <p className="mt-1 truncate text-xs text-white/40">
+                    {loop.circleName}
+                  </p>
+                </div>
+
+                <span className="shrink-0 rounded-full bg-white/10 px-3 py-1 text-xs text-white/60">
+                  {loop.timing.date}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
 function OrbitView({
   circle,
   selectedPostIndex,
@@ -2819,9 +3004,15 @@ return (
             {selectedPerson && <Avatar person={selectedPerson} />}
             <div>
               <h2 className="text-lg font-semibold">{selectedPost.personName}</h2>
-              <p className="text-xs text-white/45">
-                {selectedPost.time} · {selectedPost.mood}
-              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+  <p className="text-xs text-white/45">
+    {selectedPost.time} · {selectedPost.mood}
+  </p>
+
+  <span className="rounded-full bg-white/10 px-3 py-1 text-[11px] font-semibold text-white/55">
+    {getPostExpirationLabel(selectedPost)}
+  </span>
+</div>
             </div>
           </div>
 
@@ -3787,6 +3978,7 @@ function PeopleView({
   incomingRequests,
   onOpenAddPerson,
   onUpdatePersonStatus,
+  onRemoveFriend,
   onAcceptFriendRequest,
   onIgnoreFriendRequest,
 }: {
@@ -3796,6 +3988,7 @@ function PeopleView({
   onUpdatePersonStatus: (personId: string, status: ContactStatus) => void;
   onAcceptFriendRequest: (request: FriendRequest) => void;
   onIgnoreFriendRequest: (request: FriendRequest) => void;
+  onRemoveFriend: (personId: string) => void;
 }) {
   const friends = contacts.filter((person) => person.status === "Friend");
   const sentRequests = contacts.filter((person) => person.status === "Pending");
@@ -3825,10 +4018,19 @@ function PeopleView({
           )}
 
           {person.status === "Friend" && (
-            <span className="rounded-full bg-white/10 px-3 py-2 text-xs text-white/45">
-              Friend
-            </span>
-          )}
+  <div className="flex shrink-0 items-center gap-2">
+    <span className="rounded-full bg-white/10 px-3 py-2 text-xs text-white/45">
+      Friend
+    </span>
+
+    <button
+      onClick={() => onRemoveFriend(person.id)}
+      className="rounded-full bg-white/8 px-3 py-2 text-xs font-semibold text-white/45 active:scale-95"
+    >
+      Remove
+    </button>
+  </div>
+)}
         </div>
       </div>
     );
