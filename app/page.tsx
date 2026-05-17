@@ -4698,7 +4698,7 @@ return (
 </div>
 
     <div
-      className="relative -mt-2 h-[275px] touch-pan-y overflow-visible rounded-[2rem] pb-12"
+      className="relative -mt-6 h-[265px] touch-pan-y overflow-visible rounded-[2rem] pb-12"
       onPointerDown={(event) => {
   handleOrbitSwipeStart(event.clientX, event.clientY);
 }}
@@ -4720,7 +4720,7 @@ return (
     key={post.id}
     type="button"
     onClick={() => choosePost(index)}
-    className={`absolute left-1/2 top-[32%] grid h-[5.55rem] w-[5.55rem] place-items-center active:scale-95 ${
+    className={`absolute left-1/2 top-[27%] grid h-[5.55rem] w-[5.55rem] place-items-center active:scale-95 ${
       isDraggingOrbit ? "transition-none" : "transition-all duration-500 ease-out"
     }`}
     style={{
@@ -4730,50 +4730,56 @@ return (
       zIndex: position.zIndex,
     }}
   >
-    <div
-      className={`relative grid h-full w-full place-items-center overflow-visible rounded-full bg-gradient-to-br ${post.gradient} p-[3px] shadow-xl transition-all duration-500 ${
-        isActive ? "shadow-white/20 ring-4 ring-white/10" : "shadow-black/30"
-      }`}
-    >
-      <div
-        className={`absolute -inset-1 rounded-full bg-gradient-to-br ${post.personColor} transition-all duration-500 ${
-          isActive ? "opacity-60 blur-sm" : "opacity-25 blur-[3px]"
-        }`}
+  <div
+  className={`relative grid h-full w-full place-items-center overflow-visible rounded-full bg-gradient-to-br ${post.gradient} p-[3px] shadow-xl transition-all duration-500 ${
+    isActive ? "shadow-white/20 ring-4 ring-white/10" : "shadow-black/30"
+  }`}
+>
+  <div
+    className={`absolute -inset-1 rounded-full bg-gradient-to-br ${post.personColor} transition-all duration-500 ${
+      isActive ? "opacity-60 blur-sm" : "opacity-25 blur-[3px]"
+    }`}
+  />
+
+  <div
+    className={`relative aspect-square overflow-hidden rounded-full border border-white/25 bg-slate-950/30 ${
+      isActive ? "h-[5.15rem] w-[5.15rem]" : "h-[4.8rem] w-[4.8rem]"
+    }`}
+  >
+    {post.photoUrl ? (
+      <img
+        src={post.photoUrl}
+        alt={`${post.personName} post`}
+        className="absolute inset-0 h-full w-full rounded-full object-cover"
       />
-
-      <div className="relative grid h-full w-full place-items-center overflow-hidden rounded-full border border-white/25 bg-slate-950/30">
-        {post.photoUrl ? (
-          <img
-            src={post.photoUrl}
-            alt={`${post.personName} post`}
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <span className="text-sm font-black text-white">
-            {post.personInitials}
-          </span>
-        )}
+    ) : (
+      <div className="grid h-full w-full place-items-center">
+        <span className="text-sm font-black text-white">
+          {post.personInitials}
+        </span>
       </div>
+    )}
+  </div>
 
-      {myBadges.length > 0 && (
-        <div className="absolute right-1 top-1 z-20 flex -translate-y-1/3 translate-x-1/3 -space-x-1">
-          {myBadges.slice(0, 2).map((emoji, badgeIndex) => (
-            <span
-              key={`${post.id}-${emoji}-${badgeIndex}`}
-              className="grid h-6 w-6 place-items-center rounded-full border border-slate-950/50 bg-white text-xs shadow-lg shadow-black/30"
-            >
-              {emoji}
-            </span>
-          ))}
-        </div>
-      )}
-
-      {isActive && (
-        <div className="absolute -bottom-2 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-black/30">
-          {post.personName.split(" ")[0]}
-        </div>
-      )}
+  {myBadges.length > 0 && (
+    <div className="absolute right-1 top-1 z-20 flex -translate-y-1/3 translate-x-1/3 -space-x-1">
+      {myBadges.slice(0, 2).map((emoji, badgeIndex) => (
+        <span
+          key={`${post.id}-${emoji}-${badgeIndex}`}
+          className="grid h-6 w-6 place-items-center rounded-full border border-slate-950/50 bg-white text-xs shadow-lg shadow-black/30"
+        >
+          {emoji}
+        </span>
+      ))}
     </div>
+  )}
+
+  {isActive && (
+    <div className="absolute -bottom-2 rounded-full bg-white px-3 py-1 text-[10px] font-bold text-slate-950 shadow-lg shadow-black/30">
+      {post.personName.split(" ")[0]}
+    </div>
+  )}
+</div>
   </button>
 );
       })}
